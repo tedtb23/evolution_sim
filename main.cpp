@@ -7,6 +7,7 @@
 #include "clay.h"
 
 #include <iostream>
+#include <__filesystem/operations.h>
 
 #include "renderer/SDL3/clay_renderer_SDL3.c"
 
@@ -14,7 +15,7 @@ static const Uint32 FONT_ID = 0;
 
 static const Clay_Color COLOR_BLACK     = (Clay_Color) {0, 0, 0, 255};
 static const Clay_Color COLOR_WHITE     = (Clay_Color) {255, 255, 255, 255};
-static const Clay_Color COLOR_ORANGE    = (Clay_Color) {225, 138, 50, 255};
+static const Clay_Color COLOR_GREY    = (Clay_Color) {43, 41, 51, 255};
 static const Clay_Color COLOR_BLUE      = (Clay_Color) {111, 173, 162, 255};
 static const Clay_Color COLOR_LIGHT     = (Clay_Color) {224, 215, 210, 255};
 
@@ -34,38 +35,21 @@ static inline Clay_Dimensions SDL_MeasureText(Clay_StringSlice text, Clay_TextEl
     return (Clay_Dimensions) {(float) width, (float) height};
 }
 
-static Clay_RenderCommandArray Clay_CreateLayout() {
+static Clay_RenderCommandArray Clay_CreateLayout(int windowWidth, int windowHeight) {
     Clay_BeginLayout();
-    CLAY(CLAY_ID("MainContent"),
+    CLAY(CLAY_ID("SideBar"),
          CLAY_LAYOUT({
              .sizing = {
-                     .width = CLAY_SIZING_GROW(),
-                     .height = CLAY_SIZING_GROW(),
+                 .width = (float)(windowWidth / 5),
+                 .height = CLAY_SIZING_GROW()
              },
-             .padding = {10, 10},
              .childGap = 10,
              .layoutDirection = CLAY_TOP_TO_BOTTOM,
          }),
-         CLAY_BORDER({
-             .left = {20, COLOR_BLUE},
-             .right = {20, COLOR_BLUE},
-             .top = {20, COLOR_BLUE},
-             .bottom = {20, COLOR_BLUE},
-         }),
          CLAY_RECTANGLE({
-             .color = COLOR_LIGHT
+             .color = COLOR_GREY
          })
-         ) {
-        CLAY(CLAY_LAYOUT({
-            .sizing = {.width = {50.0f}, .height = CLAY_SIZING_GROW()}
-        }),
-             CLAY_BORDER({
-                 .bottom = {50, COLOR_WHITE}
-             }),
-             CLAY_RECTANGLE({
-                 .color = COLOR_ORANGE
-             })) {}
-    }
+         ) {}
     return Clay_EndLayout();
 }
 
@@ -98,7 +82,13 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     }
     SDL_SetWindowResizable(state->window, true);
 
-    TTF_Font *font = TTF_OpenFont(R"(C:\Users\tedtb\Documents\NSU Notes and Work\Capstone\evolution_sim\resources\arial.ttf)", 24);
+    const char *basePath = SDL_GetBasePath();
+
+    std::filesystem::path base(basePath);
+    std::filesystem::path fontPath = base / "../../../../resources/arial.ttf";
+    std::string fontStr = fontPath.lexically_normal().string();
+
+    TTF_Font *font = TTF_OpenFont(fontStr.c_str(), 24);
     if(!font) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
         if (state->renderer)
@@ -112,6 +102,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     }
 
     gFonts[FONT_ID] = font;
+
 
     uint64_t totalMemorySize = Clay_MinMemorySize();
     Clay_Arena clayMemory = (Clay_Arena) {
@@ -152,13 +143,16 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 }
 
 SDL_AppResult SDL_AppIterate(void *appstate) {
-    auto *state = static_cast<AppState*>(appstate);
+    const auto *state = static_cast<AppState*>(appstate);
 
-    Clay_RenderCommandArray renderCommands = Clay_CreateLayout();
+    int width, height;
+    SDL_GetWindowSize(state->window, &width, &height);
+    Clay_RenderCommandArray renderCommands = Clay_CreateLayout(width, height);
 
     SDL_SetRenderDrawColor(state->renderer, 0, 0, 0, 255);
     SDL_RenderClear(state->renderer);
     SDL_RenderClayCommands(state->renderer, &renderCommands);
+
     SDL_RenderPresent(state->renderer);
 
     return SDL_APP_CONTINUE;
@@ -174,14 +168,12 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
     auto *state = static_cast<AppState*>(appstate);
 
     if(state) {
-        if(state->renderer) {
-            SDL_free(state->renderer);
-        }
         if(state->window) {
-            SDL_free(state->window);
+            SDL_DestroyWindow(state->window);
         }
         SDL_free(state);
     }
+    TTF_CloseFont(gFonts[FONT_ID]);
     TTF_Quit();
 }
 
