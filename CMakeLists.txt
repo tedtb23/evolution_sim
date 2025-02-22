@@ -16,7 +16,10 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     find_package(SDL3 REQUIRED)
     add_executable(evolution_sim WIN32 main.cpp
             NeuralNet.cpp
-            NeuralNet.hpp)
+            NeuralNet.hpp
+            Genome.hpp
+            Neuron.hpp
+    )
     target_sources(evolution_sim PRIVATE ${CMAKE_SOURCE_DIR}/renderer/SDL3/clay_renderer_SDL3.c)
     target_link_libraries(evolution_sim PRIVATE SDL3::SDL3 SDL3_ttf)
 elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
@@ -26,7 +29,10 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
     find_package(SDL3_ttf REQUIRED)
     add_executable(evolution_sim MACOSX_BUNDLE main.cpp
             NeuralNet.cpp
-            NeuralNet.hpp)
+            NeuralNet.hpp
+            Genome.hpp
+            Neuron.hpp
+    )
     target_sources(evolution_sim PRIVATE ${CMAKE_SOURCE_DIR}/renderer/SDL3/clay_renderer_SDL3.c)
     target_link_libraries(evolution_sim PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 endif()

@@ -10,12 +10,14 @@
 #include <__filesystem/operations.h>
 
 #include "renderer/SDL3/clay_renderer_SDL3.c"
+#include "Genome.hpp"
+#include "NeuralNet.hpp"
 
 static const Uint32 FONT_ID = 0;
 
 static const Clay_Color COLOR_BLACK     = (Clay_Color) {0, 0, 0, 255};
 static const Clay_Color COLOR_WHITE     = (Clay_Color) {255, 255, 255, 255};
-static const Clay_Color COLOR_GREY    = (Clay_Color) {43, 41, 51, 255};
+static const Clay_Color COLOR_GREY      = (Clay_Color) {43, 41, 51, 255};
 static const Clay_Color COLOR_BLUE      = (Clay_Color) {111, 173, 162, 255};
 static const Clay_Color COLOR_LIGHT     = (Clay_Color) {224, 215, 210, 255};
 
@@ -63,6 +65,26 @@ void HandleClayErrors(Clay_ErrorData errorData) {
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     //(void) argc;
     //(void) argv;
+
+    Genome::Genome genome1 = Genome::createRandomGenome(1000);
+    NeuralNet net(genome1);
+
+
+    //for(uint32_t connection : genome1.connections) {
+    //    std::bitset<32> bits(connection);
+    //    std::cout << bits << std::endl;
+    //}
+    //for(const auto& pair : genome1.biases) {
+    //    std::bitset<8> neuronID(pair.first);
+    //    std::bitset<16> bias(pair.second);
+    //    std::cout << neuronID << " : " << bias << std::endl;
+    //}
+
+    Genome::Genome genome2 = Genome::createRandomGenome(10);
+    Genome::Genome genome3 = Genome::createGenomeFromParents(genome1, genome2);
+    Genome::mutateGenome(&genome1);
+    Genome::mutateGenome(&genome2);
+    Genome::mutateGenome(&genome3);
 
     if(!TTF_Init()) {
         return SDL_APP_FAILURE;

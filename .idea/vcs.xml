@@ -2,6 +2,5 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/vendored/SDL3_ttf/macos-arm64_x86_64/SDL_ttf" vcs="Git" />
   </component>
 </project>
