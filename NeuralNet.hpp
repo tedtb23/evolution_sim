@@ -11,23 +11,22 @@
 class NeuralNet {
 public:
     explicit NeuralNet(const Genome::Genome& genome);
-    //~NeuralNet();
-    const std::vector<NeuronInputType>& getInputNeuronTypes();
-    void setInputActivations(std::vector<float> activations);
-    const std::vector<NeuronOutputType>& getOutputActions();
+    [[nodiscard]] std::vector<std::pair<NeuronInputType, float>> getInputActivations() const;
+    void setInputActivations(const std::vector<std::pair<NeuronInputType, float>>& activations);
+    [[nodiscard]] std::vector<std::pair<NeuronOutputType, float>> getOutputActivations() const;
 private:
     static float sigmoid(float input);
+    static float convertRawWeightOrBias(uint16_t value);
     void feedForward() const;
+    void validate();
     std::shared_ptr<Neuron> getNeuron(
-        std::variant<NeuronInputType, NeuronOutputType, NeuronHiddenType> type,
-        uint8_t id,
+        std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
         uint16_t rawBias);
     std::shared_ptr<Neuron> createNeuron(
-        std::variant<NeuronInputType, NeuronOutputType, NeuronHiddenType> type,
-        uint8_t id,
+        std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
         uint16_t rawBias);
-    std::unordered_map<uint8_t, std::shared_ptr<Neuron>> inputNeurons;
-    std::unordered_map<uint8_t, std::shared_ptr<Neuron>> hiddenNeurons;
-    std::unordered_map<uint8_t, std::shared_ptr<Neuron>> outputNeurons;
+    std::unordered_map<NeuronInputType, std::shared_ptr<Neuron>> inputNeurons;
+    std::unordered_map<NeuronHiddenType, std::shared_ptr<Neuron>> hiddenNeurons;
+    std::unordered_map<NeuronOutputType, std::shared_ptr<Neuron>> outputNeurons;
 };
 #endif //NEURALNET_HPP

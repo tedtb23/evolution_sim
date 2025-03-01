@@ -7,7 +7,7 @@
 #include "clay.h"
 
 #include <iostream>
-#include <__filesystem/operations.h>
+#include <filesystem>
 
 #include "renderer/SDL3/clay_renderer_SDL3.c"
 #include "Genome.hpp"
@@ -66,19 +66,19 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     //(void) argc;
     //(void) argv;
 
-    Genome::Genome genome1 = Genome::createRandomGenome(1000);
+    Genome::Genome genome1 = Genome::createRandomGenome(10);
     NeuralNet net(genome1);
+    std::vector<std::pair<NeuronInputType, float>> inputActivations = net.getInputActivations();
 
+    for(auto & [neuronID, activation] : inputActivations)
+        activation = 1.0f;
 
-    //for(uint32_t connection : genome1.connections) {
-    //    std::bitset<32> bits(connection);
-    //    std::cout << bits << std::endl;
-    //}
-    //for(const auto& pair : genome1.biases) {
-    //    std::bitset<8> neuronID(pair.first);
-    //    std::bitset<16> bias(pair.second);
-    //    std::cout << neuronID << " : " << bias << std::endl;
-    //}
+    net.setInputActivations(inputActivations);
+
+    std::vector<std::pair<NeuronOutputType, float>> outputActivations = net.getOutputActivations();
+
+    for(auto & [neuronID, activation] : outputActivations)
+        std::cout << "Neuron ID: " << neuronID << "\nActivation: " << activation << std::endl << std::endl;
 
     Genome::Genome genome2 = Genome::createRandomGenome(10);
     Genome::Genome genome3 = Genome::createGenomeFromParents(genome1, genome2);
@@ -107,7 +107,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     const char *basePath = SDL_GetBasePath();
 
     std::filesystem::path base(basePath);
-    std::filesystem::path fontPath = base / "../../../../resources/arial.ttf";
+    std::filesystem::path fontPath = base / "../resources/arial.ttf";
     std::string fontStr = fontPath.lexically_normal().string();
 
     TTF_Font *font = TTF_OpenFont(fontStr.c_str(), 24);

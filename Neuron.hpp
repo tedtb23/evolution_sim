@@ -4,10 +4,18 @@
 #include <optional>
 #include <vector>
 #include <variant>
+#include <cmath>
+
+#define NEURONHIDDENTYPE_VALUES(...) constexpr NeuronHiddenType hiddenValues[] = {__VA_ARGS__}
+#define NEURONHIDDENTYPE_SIZE (sizeof(hiddenValues) / sizeof(hiddenValues[0]))
+#define NEURONINPUTTYPE_VALUES(...) constexpr NeuronInputType inputValues[] = {__VA_ARGS__}
+#define NEURONINPUTTYPE_SIZE (sizeof(inputValues) / sizeof(inputValues[0]))
+#define NEURONOUTPUTTYPE_VALUES(...) constexpr NeuronOutputType outputValues[] = {__VA_ARGS__}
+#define NEURONOUTPUTTYPE_SIZE (sizeof(outputValues) / sizeof(outputValues[0]))
 
 struct Neuron;
 
-enum class NeuronHiddenType {
+enum NeuronHiddenType {
     ZERO,
     ONE,
     TWO,
@@ -17,19 +25,19 @@ enum class NeuronHiddenType {
     SIX,
     SEVEN,
     EIGHT,
-    NINE,
-    SIZE
+    NINE
 };
+NEURONHIDDENTYPE_VALUES(ZERO,ONE,TWO,THREE,FOUR,FIVE,SIX,SEVEN,EIGHT,NINE);
 
-enum class NeuronInputType {
+enum NeuronInputType {
     SIGHT_OBJECT_FORWARD,
-    SIZE
 };
+NEURONINPUTTYPE_VALUES(SIGHT_OBJECT_FORWARD);
 
-enum class NeuronOutputType {
-    MOVE_LEFT,
-    SIZE
+enum NeuronOutputType {
+    MOVE_LEFT = SIGHT_OBJECT_FORWARD + 1,
 };
+NEURONOUTPUTTYPE_VALUES(MOVE_LEFT);
 
 struct NeuronConnection {
     std::shared_ptr<Neuron> neuronPtr;
@@ -43,11 +51,12 @@ struct NeuronConnection {
 
 struct Neuron {
     //std::variant<NeuronInputType, NeuronOutputType, NeuronHiddenType> type;
-    float activation = INFINITY;
-    float bias = NULL;
+    float activation = 0.0f;
+    float bias;
     std::optional<std::vector<NeuronConnection>> prevLayerConnections;
-    std::optional<std::vector<NeuronConnection>> nextLayerConnections;
+    //std::optional<std::vector<NeuronConnection>> nextLayerConnections;
 
+    //Neuron(const std::variant<NeuronInputType, NeuronOutputType, NeuronHiddenType> type, const float bias) : type(type), bias(bias) {}
     explicit Neuron(const float bias) : bias(bias) {}
 };
 
