@@ -2,9 +2,9 @@
 #include "Neuron.hpp"
 #include "Genome.hpp"
 #include "SDL3/SDL_log.h"
-#include <cassert>
 #include <cstdint>
 #include <vector>
+#include <utility>
 
 float NeuralNet::sigmoid(const float input) {
     return 1.00f / (1.00f + std::exp(-input));
@@ -94,62 +94,6 @@ std::vector<std::pair<NeuronOutputType, float>> NeuralNet::getOutputActivations(
     }
 
     return outputActivations;
-}
-
-//removes any hidden neurons that don't eventually connect to an input and output.
-void NeuralNet::validate() {
-    /*
-    std::set<std::shared_ptr<Neuron>> set;
-    for(auto & [neuronID, neuronPtr] : inputNeurons) {
-        if(neuronPtr->nextLayerConnections.has_value()) //maybe not needed as input neurons should always have next layer connections or they wouldn't exist.
-            for(NeuronConnection& connection : *neuronPtr->nextLayerConnections) {
-                if(connection.neuronPtr->type.index() != 1) {
-                    set.insert(neuronPtr);
-                }
-            }
-    }
-    while(!set.empty()) {
-        const std::shared_ptr<Neuron> &neuronPtr = *set.begin();
-        if (neuronPtr->nextLayerConnections.has_value())
-            for (NeuronConnection &connection: *neuronPtr->nextLayerConnections)
-                if (connection.neuronPtr->type.index() != 1 && neuronPtr != connection.neuronPtr)
-                    set.insert(neuronPtr);
-        set.erase(set.begin());
-    }
-
-    for(auto itr = hiddenNeurons.begin(); itr != hiddenNeurons.end();) {
-        const std::shared_ptr<Neuron>& neuronPtr = itr->second;
-        if(!set.contains(neuronPtr)) {
-            if(neuronPtr->prevLayerConnections.has_value())
-                for(auto jtr = neuronPtr->prevLayerConnections->begin(); jtr != neuronPtr->prevLayerConnections->end();) {
-                    auto& jeuronPtr = *jtr->neuronPtr;
-                    if(jeuronPtr.nextLayerConnections.has_value())
-                        jeuronPtr.nextLayerConnections->erase(std::remove(jeuronPtr.nextLayerConnections.value().begin(), jeuronPtr.nextLayerConnections.value().end(), jeuronPtr), jeuronPtr.nextLayerConnections->end());
-                }
-
-            itr = hiddenNeurons.erase(itr);
-        }else {
-            ++itr;
-        }
-    }
-
-    for(auto & [neuronID, neuronPtr] : outputNeurons) {
-        if(neuronPtr->prevLayerConnections.has_value()) //maybe not needed as input neurons should always have next layer connections or they wouldn't exist.
-            for(NeuronConnection& connection : *neuronPtr->prevLayerConnections) {
-                if(connection.neuronPtr->type.index() != 0) {
-                    set.insert(neuronPtr);
-                }
-            }
-    }
-    while(!set.empty()) {
-        const std::shared_ptr<Neuron>& neuronPtr = *set.begin();
-        if(neuronPtr->prevLayerConnections.has_value())
-            for(NeuronConnection& connection : *neuronPtr->prevLayerConnections)
-                if(connection.neuronPtr->type.index() != 0 && neuronPtr != connection.neuronPtr)
-                    set.insert(neuronPtr);
-        set.erase(set.begin());
-    }
-     */
 }
 
 std::shared_ptr<Neuron> NeuralNet::getNeuron(

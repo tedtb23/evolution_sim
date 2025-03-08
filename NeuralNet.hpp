@@ -4,6 +4,7 @@
 #include "Neuron.hpp"
 #include <unordered_map>
 #include <vector>
+#include <utility>
 #include <memory>
 #include <variant>
 
@@ -18,7 +19,6 @@ private:
     static float sigmoid(float input);
     static float convertRawWeightOrBias(uint16_t value);
     void feedForward() const;
-    void validate();
     std::shared_ptr<Neuron> getNeuron(
         std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
         uint16_t rawBias);

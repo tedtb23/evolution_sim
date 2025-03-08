@@ -18,7 +18,7 @@ namespace Genome {
         std::unordered_map<uint8_t, uint16_t> biases;
     };
 
-    inline static uint8_t getRandomNeuronID(const bool isSource) {
+    static inline uint8_t getRandomNeuronID(const bool isSource) {
         std::random_device rd;
         std::mt19937 mt(rd());
         std::uniform_int_distribution<uint8_t> distHidden(false, true);
@@ -45,13 +45,13 @@ namespace Genome {
         return neuronID;
     }
 
-    inline static uint16_t getRandomConnectionID() {
+    static inline uint16_t getRandomConnectionID() {
         auto connection = static_cast<uint16_t>(getRandomNeuronID(true)) << 8;
         connection |= static_cast<uint16_t>(getRandomNeuronID(false));
         return connection;
     }
 
-    inline static uint16_t getRandomWeightOrBias() {
+    static inline uint16_t getRandomWeightOrBias() {
         std::random_device rd;
         std::mt19937 mt(rd());
         std::uniform_int_distribution<uint16_t> distWeightBias(0, UINT16_MAX);
@@ -143,7 +143,7 @@ namespace Genome {
         return genome;
     }
 
-    inline void mutateGene(Genome* genomePtr, const uint16_t connectionID) {
+    static inline void mutateGene(Genome* genomePtr, const uint16_t connectionID) {
         const auto sourceID = static_cast<uint8_t>(connectionID >> 8);
         const auto destID = static_cast<uint8_t>(connectionID);
         const uint16_t weight = genomePtr->connections[connectionID];

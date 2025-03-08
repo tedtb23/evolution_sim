@@ -10,8 +10,7 @@
 #include <filesystem>
 
 #include "renderer/SDL3/clay_renderer_SDL3.c"
-#include "Genome.hpp"
-#include "NeuralNet.hpp"
+#include "Simulation.hpp"
 
 static const Uint32 FONT_ID = 0;
 
@@ -22,8 +21,9 @@ static const Clay_Color COLOR_BLUE      = (Clay_Color) {111, 173, 162, 255};
 static const Clay_Color COLOR_LIGHT     = (Clay_Color) {224, 215, 210, 255};
 
 typedef struct AppState {
-    SDL_Window *window;
-    SDL_Renderer *renderer;
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    std::unique_ptr<Simulation> simulation;
 } AppState;
 
 static inline Clay_Dimensions SDL_MeasureText(Clay_StringSlice text, Clay_TextElementConfig *config, uintptr_t userData) {
@@ -42,7 +42,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(int windowWidth, int windowHeig
     CLAY(CLAY_ID("SideBar"),
          CLAY_LAYOUT({
              .sizing = {
-                 .width = (float)(windowWidth / 5),
+                 .width = {200.0f},
                  .height = CLAY_SIZING_GROW()
              },
              .childGap = 10,
@@ -62,29 +62,20 @@ void HandleClayErrors(Clay_ErrorData errorData) {
     }
 }
 
+static float getDeltaTime() {
+    static uint64_t NOW = SDL_GetPerformanceCounter();
+    uint64_t LAST = NOW;
+    float deltaTime = 0.0f;
+
+    NOW = SDL_GetPerformanceCounter();
+    deltaTime = static_cast<float>(NOW - LAST) * 1000.0f / static_cast<float>(SDL_GetPerformanceFrequency());
+
+    return deltaTime;
+}
+
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     //(void) argc;
     //(void) argv;
-
-    Genome::Genome genome1 = Genome::createRandomGenome(10);
-    NeuralNet net(genome1);
-    std::vector<std::pair<NeuronInputType, float>> inputActivations = net.getInputActivations();
-
-    for(auto & [neuronID, activation] : inputActivations)
-        activation = 1.0f;
-
-    net.setInputActivations(inputActivations);
-
-    std::vector<std::pair<NeuronOutputType, float>> outputActivations = net.getOutputActivations();
-
-    for(auto & [neuronID, activation] : outputActivations)
-        std::cout << "Neuron ID: " << neuronID << "\nActivation: " << activation << std::endl << std::endl;
-
-    Genome::Genome genome2 = Genome::createRandomGenome(10);
-    Genome::Genome genome3 = Genome::createGenomeFromParents(genome1, genome2);
-    Genome::mutateGenome(&genome1);
-    Genome::mutateGenome(&genome2);
-    Genome::mutateGenome(&genome3);
 
     if(!TTF_Init()) {
         return SDL_APP_FAILURE;
@@ -92,6 +83,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
 
     auto *state = static_cast<AppState *>(SDL_calloc(1, sizeof(AppState)));
     if(!state) {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to allocate state memory: %s", SDL_GetError());
+
         return SDL_APP_FAILURE;
     }
     //*appstate = state;
@@ -134,10 +127,16 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
 
     int width, height;
     SDL_GetWindowSize(state->window, &width, &height);
-    Clay_Initialize(clayMemory, (Clay_Dimensions) {(float) width, (float) height}, (Clay_ErrorHandler) {HandleClayErrors});
+    Clay_Initialize(
+            clayMemory,
+            (Clay_Dimensions)
+                {(float) width, (float) height},
+                (Clay_ErrorHandler) {HandleClayErrors});
     Clay_SetMeasureTextFunction(SDL_MeasureText, 0);
 
+    state->simulation = std::make_unique<Simulation>(state->window, 1000, 10);
     *appstate = state;
+
     return SDL_APP_CONTINUE;
 }
 
@@ -169,10 +168,15 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 
     int width, height;
     SDL_GetWindowSize(state->window, &width, &height);
+
+    state->simulation->update(getDeltaTime());
+
     Clay_RenderCommandArray renderCommands = Clay_CreateLayout(width, height);
 
-    SDL_SetRenderDrawColor(state->renderer, 0, 0, 0, 255);
+    SDL_SetRenderDrawColor(state->renderer, 255, 255, 255, 255);
     SDL_RenderClear(state->renderer);
+
+    state->simulation->render(state->renderer);
     SDL_RenderClayCommands(state->renderer, &renderCommands);
 
     SDL_RenderPresent(state->renderer);
@@ -197,5 +201,6 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
     }
     TTF_CloseFont(gFonts[FONT_ID]);
     TTF_Quit();
+    SDL_Quit();
 }
 

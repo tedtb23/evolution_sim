@@ -36,8 +36,11 @@ NEURONINPUTTYPE_VALUES(SIGHT_OBJECT_FORWARD);
 
 enum NeuronOutputType {
     MOVE_LEFT = SIGHT_OBJECT_FORWARD + 1,
+    MOVE_RIGHT,
+    MOVE_UP,
+    MOVE_DOWN,
 };
-NEURONOUTPUTTYPE_VALUES(MOVE_LEFT);
+NEURONOUTPUTTYPE_VALUES(MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN);
 
 struct NeuronConnection {
     std::shared_ptr<Neuron> neuronPtr;
@@ -50,13 +53,10 @@ struct NeuronConnection {
 };
 
 struct Neuron {
-    //std::variant<NeuronInputType, NeuronOutputType, NeuronHiddenType> type;
     float activation = 0.0f;
     float bias;
     std::optional<std::vector<NeuronConnection>> prevLayerConnections;
-    //std::optional<std::vector<NeuronConnection>> nextLayerConnections;
 
-    //Neuron(const std::variant<NeuronInputType, NeuronOutputType, NeuronHiddenType> type, const float bias) : type(type), bias(bias) {}
     explicit Neuron(const float bias) : bias(bias) {}
 };
 
