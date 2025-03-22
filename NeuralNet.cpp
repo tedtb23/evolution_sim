@@ -11,6 +11,7 @@ float NeuralNet::sigmoid(const float input) {
 }
 
 float NeuralNet::convertRawWeightOrBias(const uint16_t rawValue) {
+    //convert the 16 bit unsigned value to a float between -4.0 and 4.0
     constexpr float stepSize = 8.0f / (UINT16_MAX + 1);
     return stepSize * static_cast<float>(rawValue) - 4.0f;
 }
@@ -33,23 +34,18 @@ NeuralNet::NeuralNet(const Genome::Genome& genome) {
 
         std::shared_ptr<Neuron> sourceNeuron = getNeuron(
             sourceIsHidden ?
-                std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType>
-                    (static_cast<NeuronHiddenType>(sourceID))
-                        :
-                std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType>
-                    (static_cast<NeuronInputType>(sourceID)),
+                NeuronType (static_cast<NeuronHiddenType>(sourceID))
+                    :
+                NeuronType (static_cast<NeuronInputType>(sourceID)),
             genome.biases.at(sourceFullID));
 
         std::shared_ptr<Neuron> destNeuron = getNeuron(
             destIsHidden ?
-                std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType>
-                    (static_cast<NeuronHiddenType>(destID))
-                        :
-                std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType>
-                    (static_cast<NeuronOutputType>(destID)),
+                NeuronType (static_cast<NeuronHiddenType>(destID))
+                    :
+                NeuronType (static_cast<NeuronOutputType>(destID)),
             genome.biases.at(destFullID));
 
-        //sourceNeuron->nextLayerConnections.value().emplace_back(destNeuron, weight);
         destNeuron->prevLayerConnections.value().emplace_back(sourceNeuron, weight);
     }
 }
@@ -97,14 +93,14 @@ std::vector<std::pair<NeuronOutputType, float>> NeuralNet::getOutputActivations(
 }
 
 std::shared_ptr<Neuron> NeuralNet::getNeuron(
-    const std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
+    const NeuronType type,
     const uint16_t rawBias) {
 
     std::shared_ptr<Neuron> neuron{};
 
     switch(type.index()) {
         case 0: {
-            const NeuronInputType neuronID = std::get<NeuronInputType>(type);
+            const auto& neuronID = std::get<NeuronInputType>(type);
             if(!inputNeurons.contains(neuronID)) {
                 neuron = createNeuron(type, rawBias);
             }else {
@@ -113,7 +109,7 @@ std::shared_ptr<Neuron> NeuralNet::getNeuron(
             break;
         }
         case 1: {
-            const NeuronHiddenType neuronID = std::get<NeuronHiddenType>(type);
+            const auto& neuronID = std::get<NeuronHiddenType>(type);
             if(!hiddenNeurons.contains(neuronID)) {
                 neuron = createNeuron(type, rawBias);
             }else {
@@ -122,7 +118,7 @@ std::shared_ptr<Neuron> NeuralNet::getNeuron(
             break;
         }
         case 2: {
-            const NeuronOutputType neuronID = std::get<NeuronOutputType>(type);
+            const auto& neuronID = std::get<NeuronOutputType>(type);
             if(!outputNeurons.contains(neuronID)) {
                 neuron = createNeuron(type, rawBias);
             }else {
@@ -136,7 +132,7 @@ std::shared_ptr<Neuron> NeuralNet::getNeuron(
 }
 
 std::shared_ptr<Neuron> NeuralNet::createNeuron(
-    const std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
+    const NeuronType type,
     const uint16_t rawBias) {
 
     auto neuron = std::make_shared<Neuron>(convertRawWeightOrBias(rawBias));
@@ -144,16 +140,12 @@ std::shared_ptr<Neuron> NeuralNet::createNeuron(
     switch(type.index()) {
         case 0: {
             inputNeurons[std::get<NeuronInputType>(type)] = neuron;
-            //neuron->nextLayerConnections = std::vector<NeuronConnection>();
-            //neuron->nextLayerConnections.value().reserve(10);
             break;
         }
         case 1: {
             hiddenNeurons[std::get<NeuronHiddenType>(type)] = neuron;
             neuron->prevLayerConnections = std::vector<NeuronConnection>();
-            //neuron->nextLayerConnections = std::vector<NeuronConnection>();
             neuron->prevLayerConnections.value().reserve(10);
-            //neuron->nextLayerConnections.value().reserve(10);
             break;
         }
         case 2: {

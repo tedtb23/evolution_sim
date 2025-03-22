@@ -19,7 +19,11 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
             Organism.hpp
             Simulation.cpp
             Simulation.hpp
-            SimState.hpp
+            SimStructs.hpp
+            QuadTree.cpp
+            QuadTree.hpp
+            SimObject.hpp
+            UtilityStructs.hpp
     )
     target_sources(evolution_sim PRIVATE ${CMAKE_SOURCE_DIR}/renderer/SDL3/clay_renderer_SDL3.c)
     target_link_libraries(evolution_sim PRIVATE SDL3::SDL3 SDL3_ttf)
@@ -38,7 +42,11 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
             Organism.hpp
             Simulation.cpp
             Simulation.hpp
-            SimState.hpp
+            SimStructs.hpp
+            QuadTree.cpp
+            QuadTree.hpp
+            SimObject.hpp
+            UtilityStructs.hpp
     )
     target_sources(evolution_sim PRIVATE ${CMAKE_SOURCE_DIR}/renderer/SDL3/clay_renderer_SDL3.c)
     target_link_libraries(evolution_sim PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf)

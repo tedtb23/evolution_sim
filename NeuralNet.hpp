@@ -4,10 +4,9 @@
 #include "Neuron.hpp"
 #include <unordered_map>
 #include <vector>
-#include <utility>
 #include <memory>
 #include <variant>
-
+#include <utility>
 
 class NeuralNet {
 public:
@@ -16,15 +15,13 @@ public:
     void setInputActivations(const std::vector<std::pair<NeuronInputType, float>>& activations);
     [[nodiscard]] std::vector<std::pair<NeuronOutputType, float>> getOutputActivations() const;
 private:
+    using NeuronType = std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType>;
+
     static float sigmoid(float input);
     static float convertRawWeightOrBias(uint16_t value);
     void feedForward() const;
-    std::shared_ptr<Neuron> getNeuron(
-        std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
-        uint16_t rawBias);
-    std::shared_ptr<Neuron> createNeuron(
-        std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType> type,
-        uint16_t rawBias);
+    std::shared_ptr<Neuron> getNeuron(NeuronType type, uint16_t rawBias);
+    std::shared_ptr<Neuron> createNeuron(NeuronType type, uint16_t rawBias);
     std::unordered_map<NeuronInputType, std::shared_ptr<Neuron>> inputNeurons;
     std::unordered_map<NeuronHiddenType, std::shared_ptr<Neuron>> hiddenNeurons;
     std::unordered_map<NeuronOutputType, std::shared_ptr<Neuron>> outputNeurons;

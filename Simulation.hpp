@@ -1,22 +1,24 @@
 #ifndef SIMULATION_HPP
 #define SIMULATION_HPP
 
-#include "SimState.hpp"
-#include "Organism.hpp"
+#include "SimStructs.hpp"
 #include "SDL3/SDL.h"
-#include <vector>
+#include "Organism.hpp"
+#include <unordered_map>
+#include <memory>
 
 class Simulation {
 public:
-    Simulation(SDL_Window* window, int initialOrganisms, int genomeSize);
-    void update(float deltaTime);
+    Simulation(const SDL_Rect& simBounds, int initialOrganisms, int genomeSize);
+    void update(const SDL_Rect& simBounds, float deltaTime);
+    void fixedUpdate();
     void render(SDL_Renderer* renderer);
     void setGenomeSize(int genomeSize);
 
 
 private:
-    std::vector<Organism> organisms;
-    SimState state{};
+    std::unordered_map<uint64_t, Organism> organisms;
+    std::shared_ptr<SimState> statePtr;
 };
 
 

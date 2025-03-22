@@ -77,6 +77,13 @@ build CMakeFiles/evolution_sim.dir/Simulation.cpp.obj: CXX_COMPILER__evolution_s
   OBJECT_DIR = CMakeFiles\evolution_sim.dir
   OBJECT_FILE_DIR = CMakeFiles\evolution_sim.dir
 
+build CMakeFiles/evolution_sim.dir/QuadTree.cpp.obj: CXX_COMPILER__evolution_sim_unscanned_Debug C$:/Users/tedtb/Documents/NSU$ Notes$ and$ Work/Capstone/evolution_sim/QuadTree.cpp || cmake_object_order_depends_target_evolution_sim
+  DEP_FILE = CMakeFiles\evolution_sim.dir\QuadTree.cpp.obj.d
+  FLAGS = -g -std=gnu++20 -fdiagnostics-color=always
+  INCLUDES = -I"C:/Users/tedtb/Documents/NSU Notes and Work/Capstone/evolution_sim/vendored/SDL3/x86_64-w64-mingw32/include" -I"C:/Users/tedtb/Documents/NSU Notes and Work/Capstone/evolution_sim/vendored/SDL3_ttf/x86_64-w64-mingw32/include"
+  OBJECT_DIR = CMakeFiles\evolution_sim.dir
+  OBJECT_FILE_DIR = CMakeFiles\evolution_sim.dir
+
 build CMakeFiles/evolution_sim.dir/renderer/SDL3/clay_renderer_SDL3.c.obj: C_COMPILER__evolution_sim_unscanned_Debug C$:/Users/tedtb/Documents/NSU$ Notes$ and$ Work/Capstone/evolution_sim/renderer/SDL3/clay_renderer_SDL3.c || cmake_object_order_depends_target_evolution_sim
   DEP_FILE = CMakeFiles\evolution_sim.dir\renderer\SDL3\clay_renderer_SDL3.c.obj.d
   FLAGS = -g -fdiagnostics-color=always
@@ -92,7 +99,7 @@ build CMakeFiles/evolution_sim.dir/renderer/SDL3/clay_renderer_SDL3.c.obj: C_COM
 #############################################
 # Link the executable evolution_sim.exe
 
-build evolution_sim.exe: CXX_EXECUTABLE_LINKER__evolution_sim_Debug CMakeFiles/evolution_sim.dir/main.cpp.obj CMakeFiles/evolution_sim.dir/NeuralNet.cpp.obj CMakeFiles/evolution_sim.dir/Organism.cpp.obj CMakeFiles/evolution_sim.dir/Simulation.cpp.obj CMakeFiles/evolution_sim.dir/renderer/SDL3/clay_renderer_SDL3.c.obj | C$:/Users/tedtb/Documents/NSU$ Notes$ and$ Work/Capstone/evolution_sim/vendored/SDL3/x86_64-w64-mingw32/lib/libSDL3.dll.a
+build evolution_sim.exe: CXX_EXECUTABLE_LINKER__evolution_sim_Debug CMakeFiles/evolution_sim.dir/main.cpp.obj CMakeFiles/evolution_sim.dir/NeuralNet.cpp.obj CMakeFiles/evolution_sim.dir/Organism.cpp.obj CMakeFiles/evolution_sim.dir/Simulation.cpp.obj CMakeFiles/evolution_sim.dir/QuadTree.cpp.obj CMakeFiles/evolution_sim.dir/renderer/SDL3/clay_renderer_SDL3.c.obj | C$:/Users/tedtb/Documents/NSU$ Notes$ and$ Work/Capstone/evolution_sim/vendored/SDL3/x86_64-w64-mingw32/lib/libSDL3.dll.a
   FLAGS = -g
   LINK_FLAGS = -mwindows
   LINK_LIBRARIES = "C:/Users/tedtb/Documents/NSU Notes and Work/Capstone/evolution_sim/vendored/SDL3/x86_64-w64-mingw32/lib/libSDL3.dll.a"  -lSDL3_ttf  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32

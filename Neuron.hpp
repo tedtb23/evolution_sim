@@ -3,8 +3,6 @@
 #include <memory>
 #include <optional>
 #include <vector>
-#include <variant>
-#include <cmath>
 
 #define NEURONHIDDENTYPE_VALUES(...) constexpr NeuronHiddenType hiddenValues[] = {__VA_ARGS__}
 #define NEURONHIDDENTYPE_SIZE (sizeof(hiddenValues) / sizeof(hiddenValues[0]))
