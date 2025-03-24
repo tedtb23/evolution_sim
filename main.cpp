@@ -9,6 +9,7 @@
 #include <iostream>
 #include <filesystem>
 #include <string>
+#include <sstream>
 
 #include "renderer/SDL3/clay_renderer_SDL3.c"
 #include "Simulation.hpp"
@@ -98,25 +99,45 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
 static Clay_RenderCommandArray Clay_Debug_CreateLayout(const int windowWidth, const int windowHeight, const std::string& FPS) {
     Clay_BeginLayout();
 
-    CLAY(CLAY_ID("FPS_Container"),
-         CLAY_LAYOUT({
-             .sizing = {.width = {100.0f}, .height = {20.0f}},
-             .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
-             .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}
-         }),
-         CLAY_RECTANGLE({
-             .color = COLOR_LIGHT
-         })
-    ) {
-        CLAY(CLAY_ID("FPS"),
-             CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(FPS.length()), .chars = FPS.c_str()}),
-                       CLAY_TEXT_CONFIG({
-                           .textColor = COLOR_BLACK,
-                           .fontId = FONT_ID,
-                           .fontSize = 10,
-                           })
-             )) {}
+    CLAY(CLAY_ID("Debug Container"), CLAY_LAYOUT({
+        .sizing = {
+        .width = {200.0f},
+        .height = CLAY_SIZING_GROW()
+        },
+        .padding = {.left = 4, .right = 4, .top = 8},
+        .childGap = 10,
+        .childAlignment = {
+            .x = CLAY_ALIGN_X_CENTER,
+            .y = CLAY_ALIGN_Y_TOP
+        },
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+    }),
+    CLAY_RECTANGLE({
+        .color = COLOR_BLACK
+    })) {
+        CLAY(CLAY_ID("FPS_Container"),
+            CLAY_LAYOUT({
+                .sizing = {.width = {100.0f}, .height = {20.0f}},
+                .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}
+            }),
+            CLAY_RECTANGLE({
+                .color = COLOR_LIGHT
+            })
+        ) {
+            CLAY(CLAY_ID("FPS"),
+                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(FPS.length()), .chars = FPS.c_str()}),
+                CLAY_TEXT_CONFIG({
+                    .textColor = COLOR_BLACK,
+                    .fontId = FONT_ID,
+                    .fontSize = 10,
+                })
+            )) {
+
+            }
+        }
     }
+
 
     return Clay_EndLayout();
 }
@@ -169,6 +190,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
         }else {
             SDL_SetWindowResizable(state->debugWindow, false);
             SDL_SetWindowMinimumSize(state->debugWindow, 400, 480);
+            SDL_SetWindowPosition(state->debugWindow, 200, 100);
         }
     #endif
 
@@ -214,7 +236,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
                 (Clay_ErrorHandler) {HandleClayErrors});
     Clay_SetMeasureTextFunction(SDL_MeasureText, 0);
 
-    state->simulation = std::make_unique<Simulation>(SDL_Rect {200, 0, width - 200, height + 0}, 1000, 10);
+    state->simulation = std::make_unique<Simulation>(SDL_Rect {200, 0, width - 200, height + 0}, 4000, 10);
     *appstate = state;
 
     return SDL_APP_CONTINUE;
@@ -251,16 +273,26 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 SDL_AppResult SDL_AppIterate(void *appstate) {
     float deltaTime = getDeltaTime();
     const auto *state = static_cast<AppState*>(appstate);
-    static float timeAccum = 0.0f;
-    const std::string FPS = "FPS: " + std::to_string((1.0f / deltaTime));
+    static float timeAccumForFixedUpdate = 0.0f;
+    static float timeAccumForFPS = 0.0f;
+    std::stringstream stream;
+    static std::string FPS = "FPS: 0.00";
+
+
+    if(timeAccumForFPS >= 1.0f) {
+        stream << std::fixed << std::setprecision(2) << (1.0f / deltaTime);
+        FPS = "FPS: " + stream.str();
+        stream.clear();
+        timeAccumForFPS = 0.0f;
+    }else timeAccumForFPS += deltaTime;
 
     int width, height;
     SDL_GetWindowSize(state->window, &width, &height);
 
-    if(timeAccum >= 0.016f) {
+    if(timeAccumForFixedUpdate >= 0.016f) {
         state->simulation->fixedUpdate();
-        timeAccum = 0.0f;
-    }else timeAccum += deltaTime;
+        timeAccumForFixedUpdate = 0.0f;
+    }else timeAccumForFixedUpdate += deltaTime;
 
     state->simulation->update(SDL_Rect {200, 0, width - 200, height + 0}, deltaTime);
     Clay_RenderCommandArray renderCommands = Clay_CreateLayout(width, height);

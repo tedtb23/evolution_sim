@@ -9,9 +9,13 @@ void Organism::mutateGenome() {
 }
 
 void Organism::update(const float deltaTime) {
-    simStatePtr->quadTree.insert(SimObject{id, SDL_FRect{position.x, position.y, width, height}});
+    const Vec2 lastPosition = position;
     updateInputs();
     updateFromOutputs(deltaTime);
+    if(position != lastPosition) {
+        simStatePtr->quadTree.remove(SimObject(id, SDL_FRect{lastPosition.x, lastPosition.y, width, height}));
+        simStatePtr->quadTree.insert(SimObject(id, SDL_FRect{position.x, position.y, width, height}));
+    }
     handleCollisions();
 }
 
@@ -42,29 +46,25 @@ void Organism::updateFromOutputs(const float deltaTime) {
         switch(neuronID) {
             case MOVE_LEFT: {
                 Vec2 moveVelocity = velocity;
-                //moveVelocity.x += -activation * deltaTime;
-                moveVelocity.x += -acceleration * deltaTime;
+                moveVelocity.x += -activation * acceleration * deltaTime;
                 move(moveVelocity);
                 break;
             }
             case MOVE_RIGHT: {
                 Vec2 moveVelocity = velocity;
-                //moveVelocity.x += activation * deltaTime;
-                moveVelocity.x += acceleration * deltaTime;
+                moveVelocity.x += activation * acceleration * deltaTime;
                 move(moveVelocity);
                 break;
             }
             case MOVE_UP: {
                 Vec2 moveVelocity = velocity;
-                //moveVelocity.y += -activation * deltaTime;
-                moveVelocity.y += -acceleration * deltaTime;
+                moveVelocity.y += -activation * acceleration * deltaTime;
                 move(moveVelocity);
                 break;
             }
             case MOVE_DOWN: {
                 Vec2 moveVelocity = velocity;
-                //moveVelocity.y += activation * deltaTime;
-                moveVelocity.y += acceleration * deltaTime;
+                moveVelocity.y += activation * acceleration * deltaTime;
                 move(moveVelocity);
                 break;
             }
@@ -82,6 +82,13 @@ void Organism::move(const Vec2& moveVelocity) {
 }
 
 void Organism::handleCollisions() {
+    std::vector<uint64_t> collidingIDs = simStatePtr->quadTree.query(SimObject(id, SDL_FRect{position.x, position.y, width, height}));
+    if(!collidingIDs.empty()) {
+        color = SDL_Color {0, 0, 255, 255};
+    }else {
+        color = SDL_Color {0, 0, 0, 255};
+    }
+
     const auto leftBound = static_cast<float>(simStatePtr->simBounds.x);
     const auto rightBound = static_cast<float>(simStatePtr->simBounds.x + simStatePtr->simBounds.w);
     const auto topBound = static_cast<float>(simStatePtr->simBounds.y);

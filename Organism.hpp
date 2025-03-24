@@ -30,8 +30,8 @@ public:
     void setInputActivations(const std::vector<std::pair<NeuronInputType, float>>& activations) {neuralNet.setInputActivations(activations);};
     [[nodiscard]] std::vector<std::pair<NeuronOutputType, float>> getOutputActivations() const {return neuralNet.getOutputActivations();};
 
-    static constexpr float acceleration = 0.5f;
-    static constexpr float velocityMax = 2.0f;
+    static constexpr float acceleration = 3.0f;
+    static constexpr float velocityMax = 10.0f;
     static constexpr float velocityDecay = 0.9f;
     static constexpr float width = 6.0f;
     static constexpr float height = 6.0f;
