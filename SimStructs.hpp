@@ -1,21 +1,24 @@
 #ifndef SIMSTATE_HPP
 #define SIMSTATE_HPP
 
-#include "SDL3/SDL.h"
 #include "QuadTree.hpp"
 
+class SimObject;
+
 struct SimState {
-    SDL_Rect simBounds;
-    QuadTree quadTree;
+    std::function<void (const SimObject& simObject)>* addFuncPtr;
+    std::function<void (uint64_t otherID)>* markDeleteFuncPtr;
+    std::function<std::shared_ptr<SimObject> (uint64_t id)>* getFuncPtr;
+    std::shared_ptr<QuadTree> quadTreePtr;
 
-    explicit SimState(const SDL_Rect& simBounds, const uint8_t quadTreeGranularity) :
-        simBounds(simBounds),
-        quadTree(
-                SDL_FRect{
-                    static_cast<float>(simBounds.x),
-                    static_cast<float>(simBounds.y),
-                    static_cast<float>(simBounds.w),
-                    static_cast<float>(simBounds.h)}, quadTreeGranularity){}
+    SimState(
+    std::function<void (const SimObject& simObject)>* addFuncPtr,
+    std::function<void (uint64_t otherID)>* markDeleteFuncPtr,
+    std::function<std::shared_ptr<SimObject> (uint64_t id)>* getFuncPtr,
+        const std::shared_ptr<QuadTree>& quadTreePtr) :
+        addFuncPtr(addFuncPtr),
+        markDeleteFuncPtr(markDeleteFuncPtr),
+        getFuncPtr(getFuncPtr),
+        quadTreePtr(quadTreePtr) {}
 };
-
 #endif //SIMSTATE_HPP

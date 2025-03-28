@@ -37,8 +37,10 @@ enum NeuronOutputType {
     MOVE_RIGHT,
     MOVE_UP,
     MOVE_DOWN,
+    EAT,
+
 };
-NEURONOUTPUTTYPE_VALUES(MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN);
+NEURONOUTPUTTYPE_VALUES(MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, EAT, );
 
 struct NeuronConnection {
     std::shared_ptr<Neuron> neuronPtr;

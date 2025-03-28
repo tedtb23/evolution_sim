@@ -2,6 +2,9 @@
 #include "Genome.hpp"
 #include "NeuralNet.hpp"
 #include "UtilityStructs.hpp"
+#include "QuadTree.hpp"
+#include "StaticSimObjects.hpp"
+#include "SimObject.hpp"
 
 void Organism::mutateGenome() {
     Genome::mutateGenome(&genome);
@@ -9,14 +12,24 @@ void Organism::mutateGenome() {
 }
 
 void Organism::update(const float deltaTime) {
-    const Vec2 lastPosition = position;
+    if(timer >= 1.00f) {
+        hunger -= 10;
+        if(hunger <= 0) {
+            markedForDeletion = true;
+        }
+        timer = 0.0f;
+    }else timer += deltaTime;
+
+    Vec2 lastPosition = Vec2(boundingBox.x, boundingBox.y);
     updateInputs();
     updateFromOutputs(deltaTime);
-    if(position != lastPosition) {
-        simStatePtr->quadTree.remove(SimObject(id, SDL_FRect{lastPosition.x, lastPosition.y, width, height}));
-        simStatePtr->quadTree.insert(SimObject(id, SDL_FRect{position.x, position.y, width, height}));
+    const auto qo = simState.quadTreePtr.get();
+    if(Vec2(boundingBox.x, boundingBox.y) != lastPosition) {
+        simState.quadTreePtr->remove(QuadTree::QuadTreeObject(id, SDL_FRect{lastPosition.x, lastPosition.y, boundingBox.w, boundingBox.h}));
+        simState.quadTreePtr->insert(QuadTree::QuadTreeObject(id, boundingBox));
+        color = SDL_Color{0, 0, 0, 255};
     }
-    handleCollisions();
+    //handleCollisions();
 }
 
 void Organism::fixedUpdate() {
@@ -24,12 +37,8 @@ void Organism::fixedUpdate() {
     velocity.y *= velocityDecay;
 }
 
-void Organism::setColor() {
-    
-}
-
 void Organism::updateInputs() {
-    for(auto & [neuronID, activation] : getInputActivations()) {
+    for(auto & [neuronID, activation] : neuralNet.getInputActivations()) {
         activation = 1.0f; //temporary
         switch(neuronID) {
             case SIGHT_OBJECT_FORWARD: {
@@ -41,7 +50,7 @@ void Organism::updateInputs() {
 }
 
 void Organism::updateFromOutputs(const float deltaTime) {
-    for(auto & [neuronID, activation] : getOutputActivations()) {
+    for(auto & [neuronID, activation] : neuralNet.getOutputActivations()) {
         if(activation < 0.50f) continue;
         switch(neuronID) {
             case MOVE_LEFT: {
@@ -68,6 +77,10 @@ void Organism::updateFromOutputs(const float deltaTime) {
                 move(moveVelocity);
                 break;
             }
+            case EAT: {
+                tryEat(activation);
+                break;
+            }
             default: break;
         }
     }
@@ -76,26 +89,25 @@ void Organism::updateFromOutputs(const float deltaTime) {
 void Organism::move(const Vec2& moveVelocity) {
     if(abs(moveVelocity.x) <= velocityMax && abs(moveVelocity.y) <= velocityMax) {
         velocity = moveVelocity;
-        position.x += moveVelocity.x;
-        position.y += moveVelocity.y;
+        boundingBox.x += moveVelocity.x;
+        boundingBox.y += moveVelocity.y;
     }
 }
 
-void Organism::handleCollisions() {
-    std::vector<uint64_t> collidingIDs = simStatePtr->quadTree.query(SimObject(id, SDL_FRect{position.x, position.y, width, height}));
-    if(!collidingIDs.empty()) {
-        color = SDL_Color {0, 0, 255, 255};
-    }else {
-        color = SDL_Color {0, 0, 0, 255};
+void Organism::tryEat(const float activation) {
+    const int threshold = static_cast<int>(activation * 100.0f);
+    std::vector<uint64_t> collidingIDs = simState.quadTreePtr->query(QuadTree::QuadTreeObject(id, SDL_FRect{boundingBox.x, boundingBox.y, boundingBox.w, boundingBox.h}));
+    for(const uint64_t collidingID : collidingIDs) {
+        std::shared_ptr<SimObject> objectPtr = (*simState.getFuncPtr)(collidingID);
+        std::shared_ptr<Food> foodPtr = std::dynamic_pointer_cast<Food>(objectPtr);
+        if(foodPtr && !foodPtr->shouldDelete() && hunger < threshold) {
+            hunger += foodPtr->getNutritionalValue();
+            if(hunger > 100) hunger = 100;
+            foodPtr->markForDeletion();
+        }
     }
-
-    const auto leftBound = static_cast<float>(simStatePtr->simBounds.x);
-    const auto rightBound = static_cast<float>(simStatePtr->simBounds.x + simStatePtr->simBounds.w);
-    const auto topBound = static_cast<float>(simStatePtr->simBounds.y);
-    const auto bottomBound = static_cast<float>(simStatePtr->simBounds.y + simStatePtr->simBounds.h);
-
-    if(position.x < leftBound) position.x = leftBound;
-    if(position.x + width > rightBound) position.x = rightBound - width;
-    if(position.y < topBound) position.y = topBound;
-    if(position.y + height > bottomBound) position.y = bottomBound - height;
 }
+
+//void Organism::handleCollisions() {
+
+//}
