@@ -5,11 +5,9 @@ struct Vec2 {
     float x;
     float y;
 
-    Vec2(float x, float y) : x(x), y(y) {};
+    Vec2(const float x, const float y) : x(x), y(y) {};
 
-    bool operator==(const Vec2& other) const{
-        return this->x == other.x && this->y == other.y;
-    }
+    bool operator==(const Vec2& other) const = default;
 };
 
 #endif //UTILITYSTRUCTS_HPP
