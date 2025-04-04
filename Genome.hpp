@@ -8,6 +8,9 @@
 #include <unordered_map>
 
 namespace Genome {
+
+    static std::mt19937 mt{std::random_device{}()};
+
     struct Genome {
         // [source neuron is hidden | source neuron id | destination neuron is hidden | destination neuron id ] -> weight
         // [0                       | 0000000          | 0                            | 0000000               ] -> 16bits
@@ -19,12 +22,10 @@ namespace Genome {
     };
 
     static inline uint8_t getRandomNeuronID(const bool isSource) {
-        std::random_device rd;
-        std::mt19937 mt(rd());
-        std::uniform_int_distribution<uint8_t> distHidden(false, true);
+        std::bernoulli_distribution distHidden(0.50);
         std::uniform_int_distribution<uint8_t> distNeuronID;
 
-        const bool isHidden = static_cast<bool>(distHidden(mt));
+        const bool isHidden = distHidden(mt);
 
         if(isHidden)
             distNeuronID.param(std::uniform_int_distribution<uint8_t>::param_type(0,
@@ -36,7 +37,7 @@ namespace Genome {
                     NEURONINPUTTYPE_SIZE - 1));
             else
                 distNeuronID.param(std::uniform_int_distribution<uint8_t>::param_type(
-                    NEURONINPUTTYPE_SIZE, //maybe change range to 0-NeuronOutputType::SIZE - 1
+                    NEURONINPUTTYPE_SIZE,
                     NEURONINPUTTYPE_SIZE + NEURONOUTPUTTYPE_SIZE - 1));
 
         uint8_t neuronID = static_cast<uint8_t>(isHidden) << 7;
@@ -52,8 +53,6 @@ namespace Genome {
     }
 
     static inline uint16_t getRandomWeightOrBias() {
-        std::random_device rd;
-        std::mt19937 mt(rd());
         std::uniform_int_distribution<uint16_t> distWeightBias(0, UINT16_MAX);
 
         return distWeightBias(mt);
@@ -99,8 +98,6 @@ namespace Genome {
         std::uniform_int_distribution<int> distNumSmallerParentGenes(1, static_cast<int>(smallerParentPtr->connections.size()) - 2);
         std::uniform_int_distribution<uint8_t> distWhichParentFirst(true, false);
 
-        std::random_device rd;
-        std::mt19937 mt(rd());
         const int numSmallerParentGenes = distNumSmallerParentGenes(mt);
         const bool smallerParentFirst = static_cast<bool>(distWhichParentFirst(mt));
 
@@ -143,13 +140,11 @@ namespace Genome {
         return genome;
     }
 
-    static inline void mutateGene(Genome* genomePtr, const uint16_t connectionID) {
+    static inline void mutateGene(const uint16_t connectionID, Genome* genomePtr) {
         const auto sourceID = static_cast<uint8_t>(connectionID >> 8);
         const auto destID = static_cast<uint8_t>(connectionID);
         const uint16_t weight = genomePtr->connections[connectionID];
 
-        std::random_device rd;
-        std::mt19937 mt(rd());
         //mutation type of 0 denotes a source neuron mutation,
         //1 denotes a destination neuron mutation, 2 denotes a weight mutation,
         //3 denotes a bias mutation, and 4 denotes a whole gene mutation
@@ -210,8 +205,8 @@ namespace Genome {
     }
 
     inline void mutateGenome(Genome* genomePtr) {
-        std::random_device rd;
-        std::mt19937 mt(rd());
+        if(genomePtr->connections.empty()) return;
+
         std::geometric_distribution<int> distNumConnectionsToMutate(0.2);
         std::uniform_int_distribution<int> distConnectionsToMutate(0, static_cast<int>(genomePtr->connections.size()) - 1);
         int numConnectionsToMutate;
@@ -228,6 +223,8 @@ namespace Genome {
         int i = 0;
         auto itrConnections = genomePtr->connections.begin();
         auto itrConnectionsToMutate = connectionsToMutate.begin();
+        std::vector<uint16_t> connectionIDs;
+        connectionIDs.reserve(connectionsToMutate.size());
         while(itrConnections != genomePtr->connections.end() && itrConnectionsToMutate != connectionsToMutate.end()) {
             if(i != *itrConnectionsToMutate) {
                 ++i;
@@ -237,8 +234,10 @@ namespace Genome {
             ++i;
             ++itrConnectionsToMutate;
 
-            const uint16_t connectionID = itrConnections->first;
-            mutateGene(genomePtr, connectionID);
+            connectionIDs.push_back(itrConnections->first);
+        }
+        for(const uint16_t connectionID : connectionIDs) {
+            mutateGene(connectionID, genomePtr);
         }
     }
 }

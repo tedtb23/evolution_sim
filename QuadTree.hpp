@@ -1,12 +1,12 @@
 #ifndef QUADTREE_HPP
 #define QUADTREE_HPP
 
+#include "SDL3/SDL.h"
 #include <vector>
 #include <memory>
 #include <cstdint>
 #include <unordered_set>
 #include <array>
-#include "SDL3/SDL.h"
 
 class QuadTree {
 public:
@@ -26,22 +26,24 @@ public:
             return this->id > other.id;
         }
     };
-    friend class QuadTree;
     /**
     * @param bounds an sdl float rectangle with the x,y members pointing to the top left point of the rectangle
     * @param granularity the amount of points that can be in a rectangle before it is subdivided further
     */
     QuadTree(const SDL_FRect& bounds, uint8_t granularity) : bounds(bounds), granularity(granularity) {objects.reserve(granularity);};
 
+    //[[nodiscard]] SDL_FRect getBounds() const{return bounds;}
+
     void insert(const QuadTreeObject& object);
     void remove(const QuadTreeObject& object);
     void undivide();
 
     [[nodiscard]] std::vector<uint64_t> query(const QuadTreeObject& object) const;
+    [[nodiscard]] std::vector<uint64_t> getNearestNeighbors(const QuadTreeObject& object) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, uint64_t>> getIntersections() const;
 
     void show(SDL_Renderer& renderer) const;
-    size_t size() const;
+    [[nodiscard]] size_t size() const;
 
 private:
     struct QuadTreeObjectHash {
@@ -82,12 +84,16 @@ private:
     static constexpr float minHeight = 10.0f;
 
     using QuadTreeObjectPairSet = std::unordered_set<QuadTreeObjectPair, QuadTreeObjectPairHash>;
+    using QuadTreeObjectSet = std::unordered_set<QuadTreeObject, QuadTreeObjectHash>;
 
     void subdivide();
     std::vector<QuadTreeObject> undivideInternal();
     void insertIntoSubTree(const QuadTreeObject& object);
     static bool rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range);
-    [[nodiscard]] std::unordered_set<QuadTreeObjectPair, QuadTreeObjectPairHash> getIntersectionsInternal() const;
+    static bool rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range);
+    [[nodiscard]] QuadTreeObjectPairSet getIntersectionsInternal() const;
+    [[nodiscard]] QuadTreeObjectSet queryInternal(const QuadTreeObject& object) const;
+    [[nodiscard]] QuadTreeObjectSet getNearestNeighborsInternal(const QuadTreeObject& object) const;
 };
 
 

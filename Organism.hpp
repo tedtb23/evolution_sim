@@ -22,7 +22,6 @@ public:
           neuralNet(genome) {}
 
     Organism(const uint64_t id,
-        const std::shared_ptr<SimState>& statePtr,
         const Organism& parent1,
         const Organism& parent2,
         const SimState& simState)
@@ -32,13 +31,14 @@ public:
 
     void mutateGenome();
     //[[nodiscard]] std::vector<std::pair<NeuronInputType, float>> getInputActivations() const {return neuralNet.getInputActivations();};
-    void setInputActivations(const std::vector<std::pair<NeuronInputType, float>>& activations) {neuralNet.setInputActivations(activations);};
+    //void setInputActivations(const std::vector<std::pair<NeuronInputType, float>>& activations) {neuralNet.setInputActivations(activations);};
     //[[nodiscard]] std::vector<std::pair<NeuronOutputType, float>> getOutputActivations() const {return neuralNet.getOutputActivations();};
 
     static constexpr float acceleration = 3.0f;
     static constexpr float velocityMax = 10.0f;
     static constexpr float velocityDecay = 0.9f;
 
+    void addCollisionID(const uint64_t collisionID) {collisionIDs.emplace_back(collisionID);}
     [[nodiscard]] Vec2 getPosition() const {return {boundingBox.x, boundingBox.y};}
     [[nodiscard]] Vec2 getVelocity() const {return velocity;}
     void setVelocity(const Vec2& newVelocity) {
@@ -60,10 +60,15 @@ private:
     int hunger = 100;
     float timer = 0.0f;
 
+    std::vector<uint64_t> neighborIDs{};
+    std::vector<uint64_t> collisionIDs{};
+
+    void handleTimer(float deltaTime);
     void updateInputs();
     void updateFromOutputs(float deltaTime);
 
     void move(const Vec2& moveVelocity);
+    float findNearbyFood(NeuronInputType neuronID) const;
     void tryEat(float activation);
 
     //void handleCollisions();

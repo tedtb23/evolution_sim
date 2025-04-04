@@ -2,6 +2,7 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <SDL3_image/SDL_image.h>
 
 #define CLAY_IMPLEMENTATION
 #include "clay.h"
@@ -15,26 +16,37 @@
 #include "Simulation.hpp"
 #include "UIStructs.hpp"
 
-static const Uint32 FONT_SMALL = 0;
-static const Uint32 FONT_MEDIUM = 1;
-static const Uint32 FONT_LARGE= 2;
+static constexpr int WINDOW_WIDTH = 1280;
+static constexpr int WINDOW_HEIGHT = 720;
+
+static constexpr Uint32 FONT_SMALL = 0;
+static constexpr Uint32 FONT_MEDIUM = 1;
+static constexpr Uint32 FONT_LARGE= 2;
 
 
-static const Clay_Color COLOR_BLACK     = (Clay_Color) {0, 0, 0, 255};
-static const Clay_Color COLOR_WHITE     = (Clay_Color) {255, 255, 255, 255};
-static const Clay_Color COLOR_GREY      = (Clay_Color) {43, 41, 51, 255};
-static const Clay_Color COLOR_BLUE      = (Clay_Color) {50, 90, 162, 255};
-static const Clay_Color COLOR_LIGHT     = (Clay_Color) {224, 215, 210, 255};
+static constexpr Clay_Color COLOR_BLACK     = (Clay_Color) {0, 0, 0, 255};
+static constexpr Clay_Color COLOR_WHITE     = (Clay_Color) {255, 255, 255, 255};
+static constexpr Clay_Color COLOR_GREY      = (Clay_Color) {43, 41, 51, 255};
+static constexpr Clay_Color COLOR_BLUE      = (Clay_Color) {50, 90, 162, 255};
+static constexpr Clay_Color COLOR_LIGHT     = (Clay_Color) {224, 215, 210, 255};
 
-typedef struct AppState {
-    SDL_Window* window;
-    SDL_Window* debugWindow;
-    SDL_Renderer* renderer;
-    SDL_Renderer* debugRenderer;
+struct ClayData {
+    std::shared_ptr<Simulation> simPtr;
+    std::string fpsStr;
+    std::string quadTreeSizeStr;
+    int windowWidth;
+    int windowHeight;
+    SDL_Surface* pauseImageDataPtr;
+    SDL_Surface* playImageDataPtr;
+};
+
+struct AppState {
+    SDL_Window* windowPtr;
+    SDL_Renderer* rendererPtr;
     Clay_SDL3RendererData rendererData;
-    Clay_SDL3RendererData debugRendererData;
-    std::shared_ptr<Simulation> simulation;
-} AppState;
+    std::shared_ptr<Simulation> simPtr;
+    ClayData clayData;
+};
 
 static inline Clay_Dimensions SDL_MeasureText(Clay_StringSlice text, Clay_TextElementConfig *config, void* userData) {
     auto** fonts = static_cast<TTF_Font**>(userData);
@@ -52,9 +64,9 @@ static inline Clay_Dimensions SDL_MeasureText(Clay_StringSlice text, Clay_TextEl
 static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointerData, intptr_t userData) {
     if(pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
         const auto simPtr = reinterpret_cast<Simulation*>(userData);
-        if(strcmp(elementID.stringId.chars, "Add_Food_Button") == 0) {
+        if(strcmp(elementID.stringId.chars, "Button_Add_Food") == 0) {
             simPtr->setUserAction(UserActionType::ADD_FOOD, UIData{});
-        }else if(strcmp(elementID.stringId.chars, "Show_QuadTree_Button") == 0) {
+        }else if(strcmp(elementID.stringId.chars, "Button_Show_QuadTree") == 0) {
             static bool quadIsShown = false;
             quadIsShown = !quadIsShown;
             simPtr->showQuadTree(quadIsShown);
@@ -62,7 +74,7 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
     }
 }
 
-static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const int windowHeight, const std::shared_ptr<Simulation>& simPtr, const std::string& FPS, const std::string& s) {
+static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
     Clay_BeginLayout();
     CLAY({
         .id = CLAY_ID("Background"),
@@ -89,9 +101,27 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
              },
              .layoutDirection = CLAY_TOP_TO_BOTTOM,
         },
+        .backgroundColor = COLOR_GREY,
         .scroll = {.vertical = true},
-        .backgroundColor = COLOR_GREY
+
     }) {
+            CLAY({
+                .id = CLAY_ID("Button_Pause"),
+                .layout = {
+                    .sizing = {.width = CLAY_SIZING_FIXED(20), .height = CLAY_SIZING_FIXED(20)}
+                },
+                .cornerRadius = {2.0f, 2.0f, 2.0f, 2.0f},
+                .image = {
+                    .imageData = static_cast<void*>(dataPtr->pauseImageDataPtr),
+                    .sourceDimensions = {
+                        .width = 20.0f,
+                        .height = 20.0f
+                    }
+                },
+
+            }) {
+
+            }
             CLAY({
             .id = CLAY_ID("FPS_Container"),
             .layout = {
@@ -101,7 +131,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
             },
             .backgroundColor = COLOR_LIGHT
             }) {
-                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(FPS.length()), .chars = FPS.c_str()}),
+                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(dataPtr->fpsStr.length()), .chars = dataPtr->fpsStr.c_str()}),
                     CLAY_TEXT_CONFIG({
                         .textColor = COLOR_BLACK,
                         .fontId = FONT_SMALL,
@@ -110,7 +140,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
                     );
             }
             CLAY({
-                .id = CLAY_ID("Add_Food_Button"),
+                .id = CLAY_ID("Button_Add_Food"),
                 .layout = {
                     .sizing = {
                         .width = {100.0f},
@@ -124,7 +154,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
                 },
                 .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
-                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(simPtr.get()));
+                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr->simPtr.get()));
                 CLAY_TEXT(CLAY_STRING("Add Food"),
                           CLAY_TEXT_CONFIG({
                               .textColor = COLOR_BLACK,
@@ -133,24 +163,24 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
                               }));
             }
             CLAY({
-                .id = CLAY_ID("Show_QuadTree_Button"),
+                .id = CLAY_ID("Button_Show_QuadTree"),
                 .layout = {
-                .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
-                .childAlignment = {
-                    .x = CLAY_ALIGN_X_CENTER,
-                    .y = CLAY_ALIGN_Y_CENTER,
+                    .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    .childAlignment = {
+                        .x = CLAY_ALIGN_X_CENTER,
+                        .y = CLAY_ALIGN_Y_CENTER,
                 }
                 },
                 .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
-                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(simPtr.get()));
+                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr->simPtr.get()));
                 CLAY_TEXT(CLAY_STRING("Show QuadTree"),
-                          CLAY_TEXT_CONFIG({
-                              .wrapMode = CLAY_TEXT_WRAP_NONE,
-                              .textColor = COLOR_BLACK,
-                              .fontId = FONT_MEDIUM,
-                              .fontSize = 0,
-                              }));
+                    CLAY_TEXT_CONFIG({
+                        .textColor = COLOR_BLACK,
+                        .fontId = FONT_MEDIUM,
+                        .fontSize = 0,
+                        .wrapMode = CLAY_TEXT_WRAP_NONE,
+                    }));
             }
             CLAY({
                 .layout = {
@@ -162,7 +192,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
                 },
                 .backgroundColor = COLOR_LIGHT
             }) {
-                CLAY_TEXT(((Clay_String){.length = static_cast<int32_t>(s.length()), .chars = s.c_str()}),
+                CLAY_TEXT(((Clay_String){.length = static_cast<int32_t>(dataPtr->quadTreeSizeStr.length()), .chars = dataPtr->quadTreeSizeStr.c_str()}),
                 CLAY_TEXT_CONFIG({
                     .textColor = COLOR_BLACK,
                     .fontId = FONT_SMALL,
@@ -170,48 +200,6 @@ static Clay_RenderCommandArray Clay_CreateLayout(const int windowWidth, const in
                 })
                 );
             }
-        }
-    }
-
-    return Clay_EndLayout();
-}
-
-static Clay_RenderCommandArray Clay_Debug_CreateLayout(const int windowWidth, const int windowHeight, const std::string& FPS) {
-    Clay_BeginLayout();
-
-    CLAY({
-        .id = CLAY_ID("Debug Container"),
-        .layout = {
-            .sizing = {
-            .width = {200.0f},
-            .height = CLAY_SIZING_GROW()
-            },
-            .padding = {.left = 4, .right = 4, .top = 8},
-            .childGap = 10,
-            .childAlignment = {
-                .x = CLAY_ALIGN_X_CENTER,
-                .y = CLAY_ALIGN_Y_TOP
-            },
-            .layoutDirection = CLAY_TOP_TO_BOTTOM,
-        },
-        .backgroundColor = COLOR_BLACK,
-    }) {
-        CLAY({
-            .id = CLAY_ID("FPS_Container"),
-            .layout = {
-                .sizing = {.width = {100.0f}, .height = {20.0f}},
-                .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
-                .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}
-            },
-            .backgroundColor = COLOR_LIGHT
-        }) {
-            CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(FPS.length()), .chars = FPS.c_str()}),
-                CLAY_TEXT_CONFIG({
-                    .textColor = COLOR_BLACK,
-                    //.fontId = FONT_ID,
-                    .fontSize = 10,
-                })
-                );
         }
     }
 
@@ -244,42 +232,21 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
         return SDL_APP_FAILURE;
     }
 
-    auto *statePtr = static_cast<AppState *>(SDL_calloc(1, sizeof(AppState)));
+    auto statePtr = new AppState;
     if(!statePtr) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to allocate state memory: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    if(!SDL_CreateWindowAndRenderer("Evolution Simulation", 640, 480, 0, &statePtr->window, &statePtr->renderer)) {
+    if(!SDL_CreateWindowAndRenderer("Evolution Simulation", WINDOW_WIDTH, WINDOW_HEIGHT, 0, &statePtr->windowPtr, &statePtr->rendererPtr)) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create window and renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-    statePtr->rendererData.renderer = statePtr->renderer;
-    SDL_SetWindowResizable(statePtr->window, true);
-    SDL_SetWindowMinimumSize(statePtr->window, 640, 480);
+    statePtr->rendererData.renderer = statePtr->rendererPtr;
+    SDL_SetWindowResizable(statePtr->windowPtr, true);
+    SDL_SetWindowMinimumSize(statePtr->windowPtr, 640, 480);
 
-    //#ifndef NDEBUG
-    //    if(!SDL_CreateWindowAndRenderer("Debug Info", 400, 480, 0, &statePtr->debugWindow, &statePtr->debugRenderer)) {
-    //        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create debug window and renderer: %s", SDL_GetError());
-    //    }else {
-    //        SDL_SetWindowResizable(statePtr->debugWindow, false);
-    //        SDL_SetWindowMinimumSize(statePtr->debugWindow, 400, 480);
-    //        SDL_SetWindowPosition(statePtr->debugWindow, 200, 100);
-    //    }
-    //    statePtr->debugRendererData.renderer = statePtr->debugRenderer;
-//
-    //    statePtr->debugRendererData.textEngine = TTF_CreateRendererTextEngine(statePtr->debugRenderer);
-    //    if (!statePtr->debugRendererData.textEngine) {
-    //        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create text engine from renderer: %s", SDL_GetError());
-    //    }
-//
-    //    statePtr->debugRendererData.fonts = static_cast<TTF_Font **>(SDL_calloc(1, sizeof(TTF_Font *)));
-    //    if (!statePtr->debugRendererData.fonts) {
-    //        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to allocate memory for the font array: %s", SDL_GetError());
-    //    }
-    //#endif
-
-    statePtr->rendererData.textEngine = TTF_CreateRendererTextEngine(statePtr->renderer);
+    statePtr->rendererData.textEngine = TTF_CreateRendererTextEngine(statePtr->rendererPtr);
     if (!statePtr->rendererData.textEngine) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to create text engine from renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -291,16 +258,21 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
         return SDL_APP_FAILURE;
     }
 
-    const char *basePath = SDL_GetBasePath();
-
+    const char* basePath = SDL_GetBasePath();
     std::filesystem::path base(basePath);
+    std::filesystem::path pauseImagePath = base / "../resources/images/button_pause.png";
+    std::filesystem::path playImagePath = base / "../resources/images/button_play.png";
     std::filesystem::path fontPath = base / "../resources/arial.ttf";
-    std::string fontStr = fontPath.lexically_normal().string();
+    std::string fontPathStr = fontPath.lexically_normal().string();
+    std::string pauseImagePathStr = pauseImagePath.lexically_normal().string();
+    std::string playImagePathStr = playImagePath.lexically_normal().string();
 
-    TTF_Font* fontSmall = TTF_OpenFont(fontStr.c_str(), 16);
-    TTF_Font* fontMedium = TTF_OpenFont(fontStr.c_str(), 24);
-    TTF_Font* fontLarge = TTF_OpenFont(fontStr.c_str(), 30);
+    SDL_Surface* pauseImageSurface = IMG_Load(pauseImagePathStr.c_str());
+    SDL_Surface* playImageSurface = IMG_Load(playImagePathStr.c_str());
 
+    TTF_Font* fontSmall = TTF_OpenFont(fontPathStr.c_str(), 16);
+    TTF_Font* fontMedium = TTF_OpenFont(fontPathStr.c_str(), 24);
+    TTF_Font* fontLarge = TTF_OpenFont(fontPathStr.c_str(), 30);
 
     if(!fontSmall || !fontMedium || !fontLarge) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to load font: %s", SDL_GetError());
@@ -311,10 +283,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     statePtr->rendererData.fonts[FONT_MEDIUM] = fontMedium;
     statePtr->rendererData.fonts[FONT_LARGE] = fontLarge;
 
-    //#ifndef NDEBUG
-    //statePtr->debugRendererData.fonts[FONT_ID] = font;
-    //#endif
-
     uint64_t totalMemorySize = Clay_MinMemorySize();
     Clay_Arena clayMemory = (Clay_Arena) {
         .capacity = totalMemorySize,
@@ -322,7 +290,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     };
 
     int width, height;
-    SDL_GetWindowSize(statePtr->window, &width, &height);
+    SDL_GetWindowSize(statePtr->windowPtr, &width, &height);
     Clay_Initialize(
             clayMemory,
             (Clay_Dimensions)
@@ -330,7 +298,19 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
                 (Clay_ErrorHandler) {HandleClayErrors});
     Clay_SetMeasureTextFunction(SDL_MeasureText, statePtr->rendererData.fonts);
 
-    statePtr->simulation = std::make_unique<Simulation>(SDL_Rect {200, 0, width - 200, height - 0}, 1000, 10);
+    statePtr->simPtr = std::make_shared<Simulation>(
+            SDL_Rect {200, 0, width - 200, height - 0},
+            1000,
+            10,
+            0.05f);
+    statePtr->clayData = ClayData{
+            statePtr->simPtr,
+            std::string("FPS: 0"),
+            std::string("QuadTree Size: 0"),
+            width,
+            height,
+            pauseImageSurface,
+            playImageSurface};
     *appstate = statePtr;
 
     return SDL_APP_CONTINUE;
@@ -358,7 +338,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN: {
             Clay_SetPointerState((Clay_Vector2) {event->button.x, event->button.y}, event->button.button == SDL_BUTTON_LEFT);
             if(event->button.button == SDL_BUTTON_RIGHT)
-                statePtr->simulation->setUserAction(UserActionType::NONE, UIData{});
+                statePtr->simPtr->setUserAction(UserActionType::NONE, UIData{});
         }
         break;
         case SDL_EVENT_MOUSE_WHEEL:
@@ -375,55 +355,48 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     float deltaTime = getDeltaTime();
     auto *statePtr = static_cast<AppState*>(appstate);
     static float timeAccumForFixedUpdate = 0.0f;
-    static float timeAccumForFPS = 0.0f;
-    std::stringstream stream;
-    static std::string FPS = "FPS: 0.00";
-
-
-    if(timeAccumForFPS >= 1.0f) {
-        stream << std::fixed << std::setprecision(2) << (1.0f / deltaTime);
-        FPS = "FPS: " + stream.str();
-        stream.clear();
-        timeAccumForFPS = 0.0f;
-    }else timeAccumForFPS += deltaTime;
+    static float timeAccumForTextUpdate = 0.0f;
+    std::stringstream fpsStream;
+    std::stringstream quadSizeStream;
 
     if(timeAccumForFixedUpdate >= 0.016f) {
-        statePtr->simulation->fixedUpdate();
+        statePtr->simPtr->fixedUpdate();
         timeAccumForFixedUpdate = 0.0f;
     }else timeAccumForFixedUpdate += deltaTime;
 
     int width, height;
-    SDL_GetWindowSize(statePtr->window, &width, &height);
+    SDL_GetWindowSize(statePtr->windowPtr, &width, &height);
 
-    statePtr->simulation->update(SDL_Rect {200, 0, width - 200, height - 0}, deltaTime);
-    std::stringstream quadSizeStream;
-    quadSizeStream << "QuadTree Size: " << statePtr->simulation->getQuadSize();
-    Clay_RenderCommandArray renderCommands = Clay_CreateLayout(width, height, statePtr->simulation, FPS, quadSizeStream.str());
+    statePtr->simPtr->update(SDL_Rect {200, 0, width - 200, height - 0}, deltaTime);
 
-    SDL_SetRenderDrawColor(statePtr->renderer, 255, 255, 255, 255);
-    SDL_RenderClear(statePtr->renderer);
+    if(timeAccumForTextUpdate >= 1.0f) {
+        timeAccumForTextUpdate = 0.0f;
 
-    statePtr->simulation->render(statePtr->renderer);
+        fpsStream << "FPS: " << std::fixed << std::setprecision(2) << (1.0f / deltaTime);
+        quadSizeStream << "QuadTree Size: " << statePtr->simPtr->getQuadSize();
+
+        statePtr->clayData.fpsStr =fpsStream.str();
+        fpsStream.clear();
+        statePtr->clayData.quadTreeSizeStr = quadSizeStream.str();
+        quadSizeStream.clear();
+    }else timeAccumForTextUpdate += deltaTime;
+
+    statePtr->clayData.windowWidth = width;
+    statePtr->clayData.windowHeight = height;
+    Clay_RenderCommandArray renderCommands = Clay_CreateLayout(&statePtr->clayData);
+
+    SDL_SetRenderDrawColor(statePtr->rendererPtr, 255, 255, 255, 255);
+    SDL_RenderClear(statePtr->rendererPtr);
+
+    statePtr->simPtr->render(statePtr->rendererPtr);
     SDL_Clay_RenderClayCommands(&statePtr->rendererData, &renderCommands);
 
-    SDL_RenderPresent(statePtr->renderer);
-
-    //#ifndef NDEBUG
-    //    int debugWidth, debugHeight;
-    //    SDL_GetWindowSize(statePtr->debugWindow, &debugWidth, &debugHeight);
-    //    Clay_RenderCommandArray debugRenderCommands = Clay_Debug_CreateLayout(debugWidth, debugHeight, FPS);
-    //    SDL_SetRenderDrawColor(statePtr->debugRenderer, 255, 255, 255, 255);
-    //    SDL_RenderClear(statePtr->debugRenderer);
-    //    SDL_Clay_RenderClayCommands(&statePtr->debugRendererData, &debugRenderCommands);
-    //    SDL_RenderPresent(statePtr->debugRenderer);
-    //#endif
+    SDL_RenderPresent(statePtr->rendererPtr);
 
     return SDL_APP_CONTINUE;
 }
 
 void SDL_AppQuit(void *appstate, SDL_AppResult result) {
-    //(void) result
-
     if(result != SDL_APP_SUCCESS) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Application failed to run");
     }
@@ -431,18 +404,11 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
     auto *statePtr = static_cast<AppState*>(appstate);
 
     if(statePtr) {
-    //renderer is already freed?
-        if(statePtr->renderer)
-            SDL_DestroyRenderer(statePtr->renderer);
+        if(statePtr->rendererPtr)
+            SDL_DestroyRenderer(statePtr->rendererPtr);
 
-        if(statePtr->debugRenderer)
-            SDL_DestroyRenderer(statePtr->debugRenderer);
-
-        if(statePtr->window)
-            SDL_DestroyWindow(statePtr->window);
-
-        if(statePtr->debugWindow)
-            SDL_DestroyWindow(statePtr->debugWindow);
+        if(statePtr->windowPtr)
+            SDL_DestroyWindow(statePtr->windowPtr);
 
         if(statePtr->rendererData.fonts) {
             for(size_t i = 0; i < sizeof(statePtr->rendererData.fonts) / sizeof(*statePtr->rendererData.fonts); i++) {
@@ -450,7 +416,13 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
             }
         }
         SDL_free(statePtr->rendererData.fonts);
-        SDL_free(statePtr);
+
+        if(statePtr->clayData.pauseImageDataPtr)
+            SDL_DestroySurface(statePtr->clayData.pauseImageDataPtr);
+        if(statePtr->clayData.playImageDataPtr)
+            SDL_DestroySurface(statePtr->clayData.playImageDataPtr);
+
+        delete statePtr;
     }
     TTF_Quit();
     SDL_Quit();

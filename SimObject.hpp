@@ -3,10 +3,10 @@
 
 #include "SimStructs.hpp"
 #include "QuadTree.hpp"
+#include "SDL3/SDL.h"
 #include <cstdint>
 #include <memory>
 #include <utility>
-#include <SDL3/SDL.h>
 
 class SimObject {
 public:
@@ -14,19 +14,19 @@ public:
     id(id),
     boundingBox(boundingBox),
     simState(std::move(simState)) {}
-    SimObject(const uint64_t id, const SDL_FRect& boundingBox, const SDL_Color& color, SimState  simState) :
+    SimObject(const uint64_t id, const SDL_FRect& boundingBox, const SDL_Color& initialColor, SimState simState) :
     id(id),
     boundingBox(boundingBox),
-    color(color),
+    color(initialColor),
     simState(std::move(simState)) {}
     virtual ~SimObject() = default;
 
 
     [[nodiscard]] uint64_t getID() const {return id;}
     [[nodiscard]] SDL_FRect getBoundingBox() const {return boundingBox;}
-    void setBoundingBox(const SDL_FRect& boundingBox) {this->boundingBox = boundingBox;}
+    void setBoundingBox(const SDL_FRect& newBoundingBox) {boundingBox = newBoundingBox;}
     [[nodiscard]] SDL_Color getColor() const {return color;}
-    void setColor(const SDL_Color& color) {this->color = color;}
+    void setColor(const SDL_Color& newColor) {color = newColor;}
     void newQuadTree(const std::shared_ptr<QuadTree>& quadTreePtr) {this->simState.quadTreePtr = quadTreePtr;}
 
     void markForDeletion() {markedForDeletion = true;}

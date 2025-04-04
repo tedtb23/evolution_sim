@@ -2,6 +2,7 @@
 #define SIMSTATE_HPP
 
 #include "QuadTree.hpp"
+#include <functional>
 
 class SimObject;
 

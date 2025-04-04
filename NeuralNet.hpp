@@ -11,13 +11,13 @@
 class NeuralNet {
 public:
     explicit NeuralNet(const Genome::Genome& genome);
+    static float sigmoid(float input);
     [[nodiscard]] std::vector<std::pair<NeuronInputType, float>> getInputActivations() const;
     void setInputActivations(const std::vector<std::pair<NeuronInputType, float>>& activations);
     [[nodiscard]] std::vector<std::pair<NeuronOutputType, float>> getOutputActivations() const;
 private:
     using NeuronType = std::variant<NeuronInputType, NeuronHiddenType, NeuronOutputType>;
 
-    static float sigmoid(float input);
     static float convertRawWeightOrBias(uint16_t value);
     void feedForward() const;
     std::shared_ptr<Neuron> getNeuron(NeuronType type, uint16_t rawBias);

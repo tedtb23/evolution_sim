@@ -2457,26 +2457,52 @@ SDL_AppResult SDLTest_CommonEventMainCallbacks(SDLTest_CommonState *state, const
             break;
         case SDLK_P:
             if (withAlt) {
-                /* Ctrl-P Cycle through progress states */
+                /* Alt-P cycle through progress states */
                 SDL_Window *window = SDL_GetWindowFromEvent(event);
                 if (window) {
-                    state->progress_state += 1;
-                    if (state->progress_state > SDL_PROGRESS_STATE_ERROR) {
-                        state->progress_state = SDL_PROGRESS_STATE_NONE;
+                    const char *name;
+                    SDL_ProgressState progress_state = SDL_GetWindowProgressState(window);
+                    progress_state += 1;
+                    if (progress_state > SDL_PROGRESS_STATE_ERROR) {
+                        progress_state = SDL_PROGRESS_STATE_NONE;
                     }
-                    SDL_SetWindowProgressState(window, state->progress_state);
+                    switch (progress_state) {
+                    case SDL_PROGRESS_STATE_NONE:
+                        name = "NONE";
+                        break;
+                    case SDL_PROGRESS_STATE_INDETERMINATE:
+                        name = "INDETERMINATE";
+                        break;
+                    case SDL_PROGRESS_STATE_NORMAL:
+                        name = "NORMAL";
+                        break;
+                    case SDL_PROGRESS_STATE_PAUSED:
+                        name = "PAUSED";
+                        break;
+                    case SDL_PROGRESS_STATE_ERROR:
+                        name = "ERROR";
+                        break;
+                    default:
+                        name = "UNKNOWN";
+                        break;
+                    }
+                    SDL_Log("Setting progress state to %s", name);
+                    SDL_SetWindowProgressState(window, progress_state);
                 }
             }
             else if (withControl)
             {
-                /* Alt-P Increase progress value */
+                /* Ctrl-P increase progress value */
                 SDL_Window *window = SDL_GetWindowFromEvent(event);
                 if (window) {
-                    state->progress_value += 0.1f;
-                    if (state->progress_value > 1.f) {
-                        state->progress_value = 0.f;
+                    float progress_value = SDL_GetWindowProgressValue(window);
+                    if (withShift) {
+                        progress_value -= 0.1f;
+                    } else {
+                        progress_value += 0.1f;
                     }
-                    SDL_SetWindowProgressValue(window, state->progress_value);
+                    SDL_Log("Setting progress value to %.1f", progress_value);
+                    SDL_SetWindowProgressValue(window, progress_value);
                 }
             }
             break;

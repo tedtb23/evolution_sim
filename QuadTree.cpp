@@ -1,4 +1,3 @@
-#include "QuadTree.hpp"
 #include <memory>
 #include <vector>
 #include <unordered_set>
@@ -6,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 #include "SDL3/SDL.h"
+#include "QuadTree.hpp"
 
 /**
  * Traverses the QuadTree and returns the amount of elements present in all leaf nodes.
@@ -13,8 +13,8 @@
 size_t QuadTree::size() const{
     size_t size = 0;
     if(divided) {
-        for(const auto& child : children) {
-            size += child->size();
+        for(const auto& childPtr : children) {
+            size += childPtr->size();
         }
     }else {
         size += objects.size();
@@ -24,6 +24,7 @@ size_t QuadTree::size() const{
 
 
 void QuadTree::insert(const QuadTreeObject& object) {
+    if(!rangeIntersectsRect(bounds, object.boundingBox)) return;
     if(divided) {
         insertIntoSubTree(object);
     }else if(objects.size() < granularity || bounds.w / 2.0f <= minWidth || bounds.h / 2.0f <= minHeight) {
@@ -42,16 +43,18 @@ void QuadTree::insert(const QuadTreeObject& object) {
 void QuadTree::insertIntoSubTree(const QuadTreeObject& object) {
     if(!divided) return;
 
-    for(const auto& child: children) {
-        if(rangeIntersectsRect(child->bounds, object.boundingBox)) child->insert(object);
+    for(const auto& childPtr: children) {
+        if(rangeIntersectsRect(childPtr->bounds, object.boundingBox)) childPtr->insert(object);
     }
 }
 
 void QuadTree::remove(const QuadTreeObject& object) {
+    if(!rangeIntersectsRect(bounds, object.boundingBox)) return;
+
     if(divided) {
-        for(const auto& child: children) {
-            if(rangeIntersectsRect(child->bounds, object.boundingBox)) {
-                child->remove(object);
+        for(const auto& childPtr: children) {
+            if(rangeIntersectsRect(childPtr->bounds, object.boundingBox)) {
+                childPtr->remove(object);
             }
         }
     }else {
@@ -61,10 +64,10 @@ void QuadTree::remove(const QuadTreeObject& object) {
 }
 
 std::vector<std::pair<uint64_t, uint64_t>> QuadTree::getIntersections() const{
-    QuadTreeObjectPairSet uniqueCollisions = getIntersectionsInternal();
+    QuadTreeObjectPairSet collisions = getIntersectionsInternal();
     std::vector<std::pair<uint64_t, uint64_t>> ids;
-    ids.reserve(uniqueCollisions.size());
-    std::transform(uniqueCollisions.begin(), uniqueCollisions.end(), std::back_inserter(ids),
+    ids.reserve(collisions.size());
+    std::transform(collisions.begin(), collisions.end(), std::back_inserter(ids),
          [](const QuadTreeObjectPair& pair) {
                         return std::make_pair(pair.first.id, pair.second.id);
                    }
@@ -73,13 +76,13 @@ std::vector<std::pair<uint64_t, uint64_t>> QuadTree::getIntersections() const{
 }
 
 std::unordered_set<QuadTree::QuadTreeObjectPair, QuadTree::QuadTreeObjectPairHash> QuadTree::getIntersectionsInternal() const{
-    QuadTreeObjectPairSet ids;
+    QuadTreeObjectPairSet collisions;
 
     if(divided) {
-        QuadTreeObjectPairSet childIDs;
-        for(const auto & child : children) {
-            childIDs = child->getIntersectionsInternal();
-            ids.merge(childIDs);
+        for(const auto & childPtr : children) {
+            QuadTreeObjectPairSet childCollisions;
+            childCollisions = childPtr->getIntersectionsInternal();
+            collisions.merge(childCollisions);
         }
     }else {
         for(int i = 0; i < objects.size(); i++) {
@@ -87,38 +90,86 @@ std::unordered_set<QuadTree::QuadTreeObjectPair, QuadTree::QuadTreeObjectPairHas
             for(int j = i + 1; j < objects.size(); j++) {
                 const QuadTreeObject& otherObject = objects[j];
                 if(rangeIntersectsRect(otherObject.boundingBox, currObject.boundingBox))
-                    ids.emplace(currObject, otherObject);
+                    collisions.emplace(currObject, otherObject);
             }
         }
     }
+    return collisions;
+}
+
+std::vector<uint64_t> QuadTree::getNearestNeighbors(const QuadTreeObject& object) const{
+    if(!rangeIntersectsRect(bounds, object.boundingBox)) return {};
+
+    QuadTreeObjectSet neighbors = getNearestNeighborsInternal(object);
+    std::vector<uint64_t> ids;
+    ids.reserve(neighbors.size());
+    std::transform(neighbors.begin(), neighbors.end(), std::back_inserter(ids),
+                   [](const QuadTreeObject& object) {
+                       return object.id;
+                   }
+    );
     return ids;
+}
+
+std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadTree::getNearestNeighborsInternal(const QuadTreeObject& object) const{
+    QuadTreeObjectSet neighbors;
+
+    if(divided) {
+        for(const auto& childPtr : children) {
+            if(rangeIntersectsRect(childPtr->bounds, object.boundingBox) || rangeIsNearRect(childPtr->bounds, object.boundingBox)) {
+                QuadTreeObjectSet childNeighbors;
+                childNeighbors = childPtr->getNearestNeighborsInternal(object);
+                neighbors.merge(childNeighbors);
+            }
+        }
+    }else {
+        for(const QuadTreeObject& currObject : objects) {
+            if(rangeIsNearRect(currObject.boundingBox, object.boundingBox)) {
+                neighbors.emplace(currObject.id, currObject.boundingBox);
+            }
+        }
+    }
+    return neighbors;
 }
 
 /**
  * Checks if the given SimObject intersects any other SimObjects present in the QuadTree.
  * @param object a SimObject struct containing the position and id of the object to check.
  * @return a vector holding the id's of simulation objects the range is intersecting.
- */
+*/
 std::vector<uint64_t> QuadTree::query(const QuadTreeObject& object) const{
-    std::vector<uint64_t> ids;
-
     if(!rangeIntersectsRect(bounds, object.boundingBox)) return {};
 
+    QuadTreeObjectSet collisions = queryInternal(object);
+    std::vector<uint64_t> ids;
+    ids.reserve(collisions.size());
+    std::transform(collisions.begin(), collisions.end(), std::back_inserter(ids),
+                   [](const QuadTreeObject& object) {
+                        return object.id;
+                    }
+    );
+    return ids;
+}
+
+std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadTree::queryInternal(const QuadTreeObject& object) const{
+    QuadTreeObjectSet collisions;
+
     if(divided) {
-        std::vector<uint64_t> subIDs;
-        for(const auto& child : children) {
-            if(rangeIntersectsRect(child->bounds, object.boundingBox)) {
-                subIDs = child->query(object);
-                ids.insert(ids.end(), subIDs.begin(), subIDs.end());
+        for(const auto& childPtr : children) {
+            if(rangeIntersectsRect(childPtr->bounds, object.boundingBox)) {
+                QuadTreeObjectSet childCollisions;
+                childCollisions = childPtr->queryInternal(object);
+                collisions.merge(childCollisions);
             }
         }
     }else {
         for(const auto& [id, boundingBox] : objects)
             if(id != object.id && rangeIntersectsRect(boundingBox, object.boundingBox))
-                ids.push_back(id);
+                collisions.emplace(id, boundingBox);
     }
-    return ids;
+    return collisions;
 }
+
 
 void QuadTree::subdivide() {
     float newWidth = bounds.w / 2.0f;
@@ -140,15 +191,15 @@ void QuadTree::undivide() {
 std::vector<QuadTree::QuadTreeObject> QuadTree::undivideInternal() {
     if(divided) {
         std::unordered_set<QuadTreeObject, QuadTreeObjectHash> subObjects;
-        for(const auto& child : children) {
-            const auto temp = child->undivideInternal();
+        for(const auto& childPtr : children) {
+            const auto temp = childPtr->undivideInternal();
             subObjects.insert(temp.begin(), temp.end());
         }
         if(subObjects.size() < granularity) {
             //objects.clear();
             objects.insert(objects.end(), subObjects.begin(), subObjects.end());
-            for(auto& child : children)
-                child.reset();
+            for(auto& childPtr : children)
+                childPtr.reset();
             divided = false;
         }else {
             std::vector<QuadTreeObject> result;
@@ -166,12 +217,19 @@ bool QuadTree::rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range
              range.y + range.h <  rect.y  );
 }
 
+bool QuadTree::rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range) {
+    return !(range.x - (rect.x  +  rect.w)  > minWidth  ||
+             rect.x  - (range.x +  range.w) > minWidth  ||
+             range.y - (rect.y  +  rect.h)  > minHeight ||
+             rect.y  - (range.y +  range.h) > minHeight );
+}
+
 void QuadTree::show(SDL_Renderer& renderer) const{
     SDL_SetRenderDrawColor(&renderer, 255, 0, 0, 255);
     SDL_RenderRect(&renderer, &bounds);
     if(divided) {
-        for(const auto& child : children) {
-            child->show(renderer);
+        for(const auto& childPtr : children) {
+            childPtr->show(renderer);
         }
     }else {
         SDL_RenderDebugText(&renderer, bounds.x, bounds.y, std::to_string(objects.size()).c_str());

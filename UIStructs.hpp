@@ -8,6 +8,7 @@ union UIData {
 enum class UserActionType {
     NONE,
     ADD_FOOD,
+    PAUSE,
     SIZE
 };
 
