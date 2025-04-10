@@ -6,6 +6,7 @@
 #include <sstream>
 #include "SDL3/SDL.h"
 #include "QuadTree.hpp"
+#include "UtilityStructs.hpp"
 
 /**
  * Traverses the QuadTree and returns the amount of elements present in all leaf nodes.
@@ -97,18 +98,29 @@ std::unordered_set<QuadTree::QuadTreeObjectPair, QuadTree::QuadTreeObjectPairHas
     return collisions;
 }
 
-std::vector<uint64_t> QuadTree::getNearestNeighbors(const QuadTreeObject& object) const{
+/**
+ * Finds the nearest neighbors of the given QuadTreeObject.
+ * @param object the QuadTreeObject to find the neighbors of.
+ * @return the nearest neighbors of object in a pairing of id and distance to object, sorted by closest distance first.
+ */
+std::vector<std::pair<uint64_t, Vec2>> QuadTree::getNearestNeighbors(const QuadTreeObject& object) const{
     if(!rangeIntersectsRect(bounds, object.boundingBox)) return {};
 
     QuadTreeObjectSet neighbors = getNearestNeighborsInternal(object);
-    std::vector<uint64_t> ids;
-    ids.reserve(neighbors.size());
-    std::transform(neighbors.begin(), neighbors.end(), std::back_inserter(ids),
-                   [](const QuadTreeObject& object) {
-                       return object.id;
-                   }
+    std::vector<std::pair<uint64_t, Vec2>> neighborsVec;
+    neighborsVec.reserve(neighbors.size());
+    std::transform(neighbors.begin(), neighbors.end(), std::back_inserter(neighborsVec),
+        [object](const QuadTreeObject& neighbor) {
+            Vec2 minDist = QuadTree::getMinDistanceBetweenRects(object.boundingBox, neighbor.boundingBox);
+            return std::make_pair(neighbor.id, minDist);
+        }
     );
-    return ids;
+    std::sort(neighborsVec.begin(), neighborsVec.end(),
+        [](const std::pair<uint64_t, Vec2>& neighbor1, const std::pair<uint64_t, Vec2>& neighbor2)-> bool{
+           return neighbor1.second < neighbor2.second;
+        }
+    );
+    return neighborsVec;
 }
 
 std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadTree::getNearestNeighborsInternal(const QuadTreeObject& object) const{
@@ -123,11 +135,10 @@ std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadT
             }
         }
     }else {
-        for(const QuadTreeObject& currObject : objects) {
-            if(rangeIsNearRect(currObject.boundingBox, object.boundingBox)) {
-                neighbors.emplace(currObject.id, currObject.boundingBox);
-            }
-        }
+        for(const QuadTreeObject& currObject : objects)
+            if(rangeIsNearRect(currObject.boundingBox, object.boundingBox) &&
+                currObject.id != object.id)
+                    neighbors.emplace(currObject.id, currObject.boundingBox);
     }
     return neighbors;
 }
@@ -218,10 +229,30 @@ bool QuadTree::rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range
 }
 
 bool QuadTree::rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range) {
-    return !(range.x - (rect.x  +  rect.w)  > minWidth  ||
-             rect.x  - (range.x +  range.w) > minWidth  ||
-             range.y - (rect.y  +  rect.h)  > minHeight ||
-             rect.y  - (range.y +  range.h) > minHeight );
+    return !(range.x - (rect.x  +  rect.w)  > 20  ||
+             rect.x  - (range.x +  range.w) > 20  ||
+             range.y - (rect.y  +  rect.h)  > 20 ||
+             rect.y  - (range.y +  range.h) > 20 );
+}
+
+Vec2 QuadTree::getMinDistanceBetweenRects(const SDL_FRect& rect, const SDL_FRect& range) {
+    float distLeft = rect.x - (range.x + range.w);
+    float distRight = range.x - (rect.x + rect.w);
+    float distTop = rect.y - (range.y + range.h);
+    float distBottom = range.y - (rect.y + rect.h);
+    float distX, distY;
+    if(distLeft < 0.0f && distRight < 0.0f) {
+        distX = 0.0f;
+    }else if(distLeft < 0.0f) {
+        distX = distRight;
+    }else distX = -distLeft;
+    if(distTop < 0.0f && distBottom < 0.0f) {
+        distY = 0.0f;
+    }else if(distTop < 0.0f) {
+        distY = distBottom;
+    }else distY = -distTop;
+
+    return {distX, distY};
 }
 
 void QuadTree::show(SDL_Renderer& renderer) const{

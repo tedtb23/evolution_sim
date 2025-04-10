@@ -7,11 +7,11 @@
 #define CLAY_IMPLEMENTATION
 #include "clay.h"
 
-#include <iostream>
 #include <filesystem>
 #include <string>
 #include <sstream>
 #include <cstring>
+#include <iomanip>
 #include "renderer/SDL3/clay_renderer_SDL3.c"
 #include "Simulation.hpp"
 #include "UIStructs.hpp"
@@ -23,7 +23,6 @@ static constexpr Uint32 FONT_SMALL = 0;
 static constexpr Uint32 FONT_MEDIUM = 1;
 static constexpr Uint32 FONT_LARGE= 2;
 
-
 static constexpr Clay_Color COLOR_BLACK     = (Clay_Color) {0, 0, 0, 255};
 static constexpr Clay_Color COLOR_WHITE     = (Clay_Color) {255, 255, 255, 255};
 static constexpr Clay_Color COLOR_GREY      = (Clay_Color) {43, 41, 51, 255};
@@ -32,8 +31,10 @@ static constexpr Clay_Color COLOR_LIGHT     = (Clay_Color) {224, 215, 210, 255};
 
 struct ClayData {
     std::shared_ptr<Simulation> simPtr;
+    SimData simData;
     std::string fpsStr;
     std::string quadTreeSizeStr;
+    std::string populationStr;
     int windowWidth;
     int windowHeight;
     SDL_Surface* pauseImageDataPtr;
@@ -63,13 +64,25 @@ static inline Clay_Dimensions SDL_MeasureText(Clay_StringSlice text, Clay_TextEl
 
 static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointerData, intptr_t userData) {
     if(pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-        const auto simPtr = reinterpret_cast<Simulation*>(userData);
-        if(strcmp(elementID.stringId.chars, "Button_Add_Food") == 0) {
+        const auto clayDataPtr = reinterpret_cast<ClayData*>(userData);
+        const auto& simPtr = clayDataPtr->simPtr;
+        if(strcmp(elementID.stringId.chars, "Background") == 0) {
+            clayDataPtr->simData = simPtr->userClicked(pointerData.position.x, pointerData.position.y);
+        }else if(strcmp(elementID.stringId.chars, "Button_Add_Food") == 0) {
             simPtr->setUserAction(UserActionType::ADD_FOOD, UIData{});
         }else if(strcmp(elementID.stringId.chars, "Button_Show_QuadTree") == 0) {
             static bool quadIsShown = false;
             quadIsShown = !quadIsShown;
             simPtr->showQuadTree(quadIsShown);
+        }else if(strcmp(elementID.stringId.chars, "Button_Pause") == 0) {
+            static bool paused = false;
+            paused = !paused;
+            if(paused)
+                simPtr->setUserAction(UserActionType::PAUSE, UIData{});
+            else
+                simPtr->setUserAction(UserActionType::UNPAUSE, UIData{});
+        }else if(strcmp(elementID.stringId.chars, "Button_Close_Organism_ToolTip") == 0) {
+            clayDataPtr->simData = {};
         }
     }
 }
@@ -86,6 +99,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
             .layoutDirection = CLAY_LEFT_TO_RIGHT
         },
     }) {
+        Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
         CLAY({
         .id = CLAY_ID("SideBar"),
         .layout = {
@@ -106,38 +120,59 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
 
     }) {
             CLAY({
-                .id = CLAY_ID("Button_Pause"),
-                .layout = {
-                    .sizing = {.width = CLAY_SIZING_FIXED(20), .height = CLAY_SIZING_FIXED(20)}
-                },
-                .cornerRadius = {2.0f, 2.0f, 2.0f, 2.0f},
-                .image = {
-                    .imageData = static_cast<void*>(dataPtr->pauseImageDataPtr),
-                    .sourceDimensions = {
-                        .width = 20.0f,
-                        .height = 20.0f
-                    }
-                },
-
-            }) {
-
-            }
-            CLAY({
-            .id = CLAY_ID("FPS_Container"),
+            .id = CLAY_ID("Row_1"),
             .layout = {
-                .sizing = {.width = {20.0f}, .height = {20.0f}},
-                .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
-                .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}
+                .childGap = 10,
+                .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER},
+                .layoutDirection = CLAY_LEFT_TO_RIGHT,
             },
-            .backgroundColor = COLOR_LIGHT
             }) {
+                CLAY({
+                    .id = CLAY_ID("Button_Pause"),
+                    .layout = {
+                        .sizing = {.width = CLAY_SIZING_FIXED(20), .height = CLAY_SIZING_FIXED(20)},
+                    },
+                     .image = {
+                        .imageData = static_cast<void*>(dataPtr->pauseImageDataPtr),
+                        .sourceDimensions = {
+                                .width = 20.0f,
+                                .height = 20.0f
+                            }
+                    },
+                }) {
+                    Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
+                }
+                CLAY({
+                    .id = CLAY_ID("FPS_Container"),
+                    .layout = {
+                        .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                        .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER},
+                    },
+                    .backgroundColor = COLOR_LIGHT,
+                })
                 CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(dataPtr->fpsStr.length()), .chars = dataPtr->fpsStr.c_str()}),
                     CLAY_TEXT_CONFIG({
                         .textColor = COLOR_BLACK,
                         .fontId = FONT_SMALL,
                         .fontSize = 0,
                     })
-                    );
+                );
+            }
+            CLAY({
+                .id = CLAY_ID("Population_Container"),
+                .layout = {
+                    .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER},
+                },
+                .backgroundColor = COLOR_LIGHT
+            }) {
+                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(dataPtr->populationStr.length()), .chars = dataPtr->populationStr.c_str()}),
+                    CLAY_TEXT_CONFIG({
+                        .textColor = COLOR_BLACK,
+                        .fontId = FONT_SMALL,
+                        .fontSize = 0,
+                    })
+                );
             }
             CLAY({
                 .id = CLAY_ID("Button_Add_Food"),
@@ -154,7 +189,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                 },
                 .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
-                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr->simPtr.get()));
+                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
                 CLAY_TEXT(CLAY_STRING("Add Food"),
                           CLAY_TEXT_CONFIG({
                               .textColor = COLOR_BLACK,
@@ -173,8 +208,8 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                 },
                 .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
-                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr->simPtr.get()));
-                CLAY_TEXT(CLAY_STRING("Show QuadTree"),
+                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
+                CLAY_TEXT(CLAY_STRING("Show_QuadTree"),
                     CLAY_TEXT_CONFIG({
                         .textColor = COLOR_BLACK,
                         .fontId = FONT_MEDIUM,
@@ -182,32 +217,121 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                         .wrapMode = CLAY_TEXT_WRAP_NONE,
                     }));
             }
-            CLAY({
-                .layout = {
-                    .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
-                    .childAlignment = {
-                        .x = CLAY_ALIGN_X_CENTER,
-                        .y = CLAY_ALIGN_Y_CENTER,
-                    }
-                },
-                .backgroundColor = COLOR_LIGHT
-            }) {
-                CLAY_TEXT(((Clay_String){.length = static_cast<int32_t>(dataPtr->quadTreeSizeStr.length()), .chars = dataPtr->quadTreeSizeStr.c_str()}),
-                CLAY_TEXT_CONFIG({
-                    .textColor = COLOR_BLACK,
-                    .fontId = FONT_SMALL,
-                    .fontSize = 0,
-                })
-                );
-            }
+            if(dataPtr->simPtr->quadTreeIsShown())
+                CLAY({
+                    .layout = {
+                        .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                        .childAlignment = {
+                            .x = CLAY_ALIGN_X_CENTER,
+                            .y = CLAY_ALIGN_Y_CENTER,
+                        }
+                    },
+                    .backgroundColor = COLOR_LIGHT
+                }) {
+                    CLAY_TEXT(((Clay_String){.length = static_cast<int32_t>(dataPtr->quadTreeSizeStr.length()), .chars = dataPtr->quadTreeSizeStr.c_str()}),
+                         CLAY_TEXT_CONFIG({
+                             .textColor = COLOR_BLACK,
+                             .fontId = FONT_SMALL,
+                             .fontSize = 0,
+                        })
+                    );
+                }
         }
+        if(!std::get<OrganismData>(dataPtr->simData).organismInfoStr.empty())
+            CLAY({
+                .id = CLAY_ID("Organism_ToolTip"),
+                .layout = {
+                    .sizing = {
+                        .width = CLAY_SIZING_FIT(200, 400),
+                        .height = CLAY_SIZING_FIT(200, 600),
+                    },
+                    .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                },
+                .backgroundColor = COLOR_LIGHT,
+            }) {
+                CLAY({
+                    .id = CLAY_ID("Button_Close_Organism_ToolTip"),
+                    .layout = {
+                        .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                        .childAlignment = {
+                            .x = CLAY_ALIGN_X_CENTER,
+                            .y = CLAY_ALIGN_Y_CENTER,
+                        }
+                    },
+                    .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
+                    .floating = {
+                        .attachPoints = {
+                            .element = CLAY_ATTACH_POINT_RIGHT_TOP,
+                            .parent = CLAY_ATTACH_POINT_RIGHT_TOP
+                        },
+                        .attachTo = CLAY_ATTACH_TO_PARENT,
+                    },
+                }) {
+                    Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
+                    CLAY_TEXT(CLAY_STRING("X"),
+                        CLAY_TEXT_CONFIG({
+                            .textColor = COLOR_BLACK,
+                            .fontId = FONT_MEDIUM,
+                            .fontSize = 0,
+                            .wrapMode = CLAY_TEXT_WRAP_NONE,
+                    }));
+                }
+                CLAY({
+                    .id = CLAY_ID("Organism_Info"),
+                    .layout = {
+                        .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    },
+                }) {
+                    CLAY_TEXT(((Clay_String){
+                        .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData).organismInfoStr.length()),
+                        .chars = std::get<OrganismData>(dataPtr->simData).organismInfoStr.c_str()}),
+                        CLAY_TEXT_CONFIG({
+                            .textColor = COLOR_BLACK,
+                            .fontId = FONT_SMALL,
+                            .fontSize = 0,
+                        })
+                    );
+                }
+                CLAY({
+                    .id = CLAY_ID("NeuralNet_Inputs"),
+                    .layout = {
+                        .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    },
+                }) {
+                    CLAY_TEXT(((Clay_String){
+                        .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData).neuralNetInputStr.length()),
+                        .chars = std::get<OrganismData>(dataPtr->simData).neuralNetInputStr.c_str()}),
+                        CLAY_TEXT_CONFIG({
+                            .textColor = COLOR_BLACK,
+                            .fontId = FONT_SMALL,
+                            .fontSize = 0,
+                        })
+                    );
+                }
+                CLAY({
+                    .id = CLAY_ID("NeuralNet_Outputs"),
+                    .layout = {
+                        .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    },
+                }) {
+                    CLAY_TEXT(((Clay_String){
+                            .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData).neuralNetOutputStr.length()),
+                            .chars = std::get<OrganismData>(dataPtr->simData).neuralNetOutputStr.c_str()}),
+                            CLAY_TEXT_CONFIG({
+                                .textColor = COLOR_BLACK,
+                                .fontId = FONT_SMALL,
+                                .fontSize = 0,
+                            })
+                    );
+                }
+            }
     }
 
     return Clay_EndLayout();
 }
 
 void HandleClayErrors(Clay_ErrorData errorData) {
-    std::cout << errorData.errorText.chars << std::endl;
     switch(errorData.errorType) {
         default:
             throw std::runtime_error("Clay Error");
@@ -301,12 +425,14 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     statePtr->simPtr = std::make_shared<Simulation>(
             SDL_Rect {200, 0, width - 200, height - 0},
             1000,
-            10,
+            20,
             0.05f);
     statePtr->clayData = ClayData{
             statePtr->simPtr,
+            {},
             std::string("FPS: 0"),
             std::string("QuadTree Size: 0"),
+            std::string("Population: 0"),
             width,
             height,
             pauseImageSurface,
@@ -337,12 +463,17 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
         break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN: {
             Clay_SetPointerState((Clay_Vector2) {event->button.x, event->button.y}, event->button.button == SDL_BUTTON_LEFT);
-            if(event->button.button == SDL_BUTTON_RIGHT)
-                statePtr->simPtr->setUserAction(UserActionType::NONE, UIData{});
+            if(event->button.button == SDL_BUTTON_RIGHT) {
+                if(statePtr->simPtr->getCurrentUserAction() == UserActionType::PAUSE) {
+                    statePtr->simPtr->setUserAction(UserActionType::UNPAUSE, UIData{});
+                }else {
+                    statePtr->simPtr->setUserAction(UserActionType::NONE, UIData{});
+                }
+            }
         }
         break;
         case SDL_EVENT_MOUSE_WHEEL:
-            Clay_UpdateScrollContainers(true, (Clay_Vector2) {event->motion.xrel, event->motion.yrel}, 0.01f);
+            Clay_UpdateScrollContainers(true, (Clay_Vector2) {event->wheel.x, event->wheel.y}, 0.01f);
             break;
         default:
             break;
@@ -358,6 +489,7 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     static float timeAccumForTextUpdate = 0.0f;
     std::stringstream fpsStream;
     std::stringstream quadSizeStream;
+    std::stringstream populationStream;
 
     if(timeAccumForFixedUpdate >= 0.016f) {
         statePtr->simPtr->fixedUpdate();
@@ -374,11 +506,14 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 
         fpsStream << "FPS: " << std::fixed << std::setprecision(2) << (1.0f / deltaTime);
         quadSizeStream << "QuadTree Size: " << statePtr->simPtr->getQuadSize();
+        populationStream << "Population: " << statePtr->simPtr->getCurrentPopulation();
 
         statePtr->clayData.fpsStr =fpsStream.str();
         fpsStream.clear();
         statePtr->clayData.quadTreeSizeStr = quadSizeStream.str();
         quadSizeStream.clear();
+        statePtr->clayData.populationStr = populationStream.str();
+        populationStream.clear();
     }else timeAccumForTextUpdate += deltaTime;
 
     statePtr->clayData.windowWidth = width;

@@ -2,6 +2,7 @@
 #define QUADTREE_HPP
 
 #include "SDL3/SDL.h"
+#include "UtilityStructs.hpp"
 #include <vector>
 #include <memory>
 #include <cstdint>
@@ -14,6 +15,7 @@ public:
         uint64_t id;
         SDL_FRect boundingBox;
 
+        explicit QuadTreeObject(const SDL_FRect& boundingBox) : id(UINT64_MAX), boundingBox(boundingBox) {};
         QuadTreeObject(const uint64_t id, const SDL_FRect& boundingBox) : id(id), boundingBox(boundingBox) {};
 
         bool operator==(const QuadTreeObject& other) const {
@@ -39,7 +41,7 @@ public:
     void undivide();
 
     [[nodiscard]] std::vector<uint64_t> query(const QuadTreeObject& object) const;
-    [[nodiscard]] std::vector<uint64_t> getNearestNeighbors(const QuadTreeObject& object) const;
+    [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> getNearestNeighbors(const QuadTreeObject& object) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, uint64_t>> getIntersections() const;
 
     void show(SDL_Renderer& renderer) const;
@@ -91,6 +93,7 @@ private:
     void insertIntoSubTree(const QuadTreeObject& object);
     static bool rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range);
     static bool rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range);
+    static Vec2 getMinDistanceBetweenRects(const SDL_FRect& rect, const SDL_FRect& range);
     [[nodiscard]] QuadTreeObjectPairSet getIntersectionsInternal() const;
     [[nodiscard]] QuadTreeObjectSet queryInternal(const QuadTreeObject& object) const;
     [[nodiscard]] QuadTreeObjectSet getNearestNeighborsInternal(const QuadTreeObject& object) const;

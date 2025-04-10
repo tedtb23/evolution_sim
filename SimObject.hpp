@@ -40,7 +40,7 @@ protected:
     SimState simState;
     uint64_t id;
     SDL_FRect boundingBox;
-    SDL_Color color{};
+    SDL_Color color = SDL_Color{0, 0, 0, 255};
     bool markedForDeletion = false;
 };
 

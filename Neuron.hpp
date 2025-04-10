@@ -4,11 +4,11 @@
 #include <optional>
 #include <vector>
 
-#define NEURONHIDDENTYPE_VALUES(...) constexpr NeuronHiddenType hiddenValues[] = {__VA_ARGS__}
+#define NEURONHIDDENTYPE_VALUES(...) constexpr char const* hiddenValues[] = {__VA_ARGS__}
 #define NEURONHIDDENTYPE_SIZE (sizeof(hiddenValues) / sizeof(hiddenValues[0]))
-#define NEURONINPUTTYPE_VALUES(...) constexpr NeuronInputType inputValues[] = {__VA_ARGS__}
+#define NEURONINPUTTYPE_VALUES(...) constexpr char const* inputValues[] = {__VA_ARGS__}
 #define NEURONINPUTTYPE_SIZE (sizeof(inputValues) / sizeof(inputValues[0]))
-#define NEURONOUTPUTTYPE_VALUES(...) constexpr NeuronOutputType outputValues[] = {__VA_ARGS__}
+#define NEURONOUTPUTTYPE_VALUES(...) constexpr char const* outputValues[] = {__VA_ARGS__}
 #define NEURONOUTPUTTYPE_SIZE (sizeof(outputValues) / sizeof(outputValues[0]))
 
 struct Neuron;
@@ -25,7 +25,7 @@ enum NeuronHiddenType {
     EIGHT,
     NINE
 };
-NEURONHIDDENTYPE_VALUES(ZERO,ONE,TWO,THREE,FOUR,FIVE,SIX,SEVEN,EIGHT,NINE);
+NEURONHIDDENTYPE_VALUES("ZERO","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE");
 
 enum NeuronInputType {
     HUNGER,
@@ -34,18 +34,35 @@ enum NeuronInputType {
     FOOD_UP,
     FOOD_DOWN,
     FOOD_COLLISION,
+    ORGANISM_LEFT,
+    ORGANISM_RIGHT,
+    ORGANISM_UP,
+    ORGANISM_DOWN,
+    ORGANISM_COLLISION,
 };
-NEURONINPUTTYPE_VALUES(HUNGER, FOOD_LEFT, FOOD_RIGHT, FOOD_UP, FOOD_DOWN, FOOD_COLLISION);
+NEURONINPUTTYPE_VALUES(
+        "HUNGER",
+        "FOOD_LEFT",
+        "FOOD_RIGHT",
+        "FOOD_UP",
+        "FOOD_DOWN",
+        "FOOD_COLLISION",
+        "ORGANISM_LEFT",
+        "ORGANISM_RIGHT",
+        "ORGANISM_UP",
+        "ORGANISM_DOWN",
+        "ORGANISM_COLLISION"
+);
 
 enum NeuronOutputType {
-    MOVE_LEFT = FOOD_COLLISION + 1,
+    MOVE_LEFT = ORGANISM_COLLISION + 1,
     MOVE_RIGHT,
     MOVE_UP,
     MOVE_DOWN,
     EAT,
 
 };
-NEURONOUTPUTTYPE_VALUES(MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, EAT, );
+NEURONOUTPUTTYPE_VALUES("MOVE_LEFT", "MOVE_RIGHT", "MOVE_UP", "MOVE_DOWN", "EAT");
 
 struct NeuronConnection {
     std::shared_ptr<Neuron> neuronPtr;

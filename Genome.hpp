@@ -86,6 +86,7 @@ namespace Genome {
     }
 
     inline Genome createGenomeFromParents(const Genome& parent1, const Genome& parent2) {
+        assert(parent1.connections.size() >= 2 && parent2.connections.size() >= 2);
         const bool p1IsLarger = parent1.connections.size() >= parent2.connections.size();
         const Genome *largerParentPtr = p1IsLarger ? &parent1 : &parent2;
         const Genome *smallerParentPtr = p1IsLarger ? &parent2 : &parent1;
@@ -96,30 +97,35 @@ namespace Genome {
         genome.connections.reserve(largerParentPtr->connections.size());
 
         std::uniform_int_distribution<int> distNumSmallerParentGenes(1, static_cast<int>(smallerParentPtr->connections.size()) - 2);
-        std::uniform_int_distribution<uint8_t> distWhichParentFirst(true, false);
+        std::bernoulli_distribution distWhichParentFirst(0.50f);
 
         const int numSmallerParentGenes = distNumSmallerParentGenes(mt);
-        const bool smallerParentFirst = static_cast<bool>(distWhichParentFirst(mt));
+        const bool smallerParentFirst = distWhichParentFirst(mt);
 
         int i = 0;
         auto itrL = largerParentPtr->connections.begin();
         auto itrS = smallerParentPtr->connections.begin();
         auto* currItr = &itrL;
         const Genome* currParentPtr = largerParentPtr;
+        if(smallerParentFirst) {
+            std::advance(itrL, numSmallerParentGenes);
+        }else {
+            std::advance(itrS, smallerParentPtr->connections.size() - numSmallerParentGenes);
+        }
 
-        while(itrL != largerParentPtr->connections.end()) {
+        while(itrL != largerParentPtr->connections.end() && itrS != smallerParentPtr->connections.end()) {
             if(
-                (smallerParentFirst && i < numSmallerParentGenes)
-                    ||
-                (!smallerParentFirst && i >= largerParentPtr->connections.size() - numSmallerParentGenes)) {
-
+                smallerParentFirst && i < numSmallerParentGenes
+                ||
+                !smallerParentFirst && i >= largerParentPtr->connections.size() - numSmallerParentGenes
+            ) {
                 currItr = &itrS;
                 currParentPtr = smallerParentPtr;
             }else if(
-                (smallerParentFirst && i >= numSmallerParentGenes)
-                    ||
-                (!smallerParentFirst && i < largerParentPtr->connections.size() - numSmallerParentGenes)) {
-
+                smallerParentFirst && i >= numSmallerParentGenes
+                ||
+                !smallerParentFirst && i < largerParentPtr->connections.size() - numSmallerParentGenes
+            ) {
                 currItr = &itrL;
                 currParentPtr = largerParentPtr;
             }
@@ -135,8 +141,8 @@ namespace Genome {
                 genome.biases[destID] = currParentPtr->biases.at(destID);
 
             ++(*currItr);
-            i++;
-            }
+            ++i;
+        }
         return genome;
     }
 
@@ -220,24 +226,10 @@ namespace Genome {
             connectionsToMutate.insert(distConnectionsToMutate(mt));
         }
 
-        int i = 0;
-        auto itrConnections = genomePtr->connections.begin();
-        auto itrConnectionsToMutate = connectionsToMutate.begin();
-        std::vector<uint16_t> connectionIDs;
-        connectionIDs.reserve(connectionsToMutate.size());
-        while(itrConnections != genomePtr->connections.end() && itrConnectionsToMutate != connectionsToMutate.end()) {
-            if(i != *itrConnectionsToMutate) {
-                ++i;
-                ++itrConnections;
-                continue;
-            }
-            ++i;
-            ++itrConnectionsToMutate;
-
-            connectionIDs.push_back(itrConnections->first);
-        }
-        for(const uint16_t connectionID : connectionIDs) {
-            mutateGene(connectionID, genomePtr);
+        for(const int connectionToMutate : connectionsToMutate) {
+            auto itrConnections = genomePtr->connections.begin();
+            std::advance(itrConnections, connectionToMutate);
+            mutateGene(itrConnections->first, genomePtr);
         }
     }
 }
