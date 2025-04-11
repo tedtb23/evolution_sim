@@ -12,6 +12,7 @@ class SimObject {
 public:
     SimObject(const uint64_t id, const SDL_FRect& boundingBox, SimState  simState) :
     id(id),
+    color({0, 0, 0, 255}),
     boundingBox(boundingBox),
     simState(std::move(simState)) {}
     SimObject(const uint64_t id, const SDL_FRect& boundingBox, const SDL_Color& initialColor, SimState simState) :
@@ -40,7 +41,7 @@ protected:
     SimState simState;
     uint64_t id;
     SDL_FRect boundingBox;
-    SDL_Color color = SDL_Color{0, 0, 0, 255};
+    SDL_Color color;
     bool markedForDeletion = false;
 };
 

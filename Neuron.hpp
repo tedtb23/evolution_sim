@@ -39,6 +39,11 @@ enum NeuronInputType {
     ORGANISM_UP,
     ORGANISM_DOWN,
     ORGANISM_COLLISION,
+    FIRE_LEFT,
+    FIRE_RIGHT,
+    FIRE_UP,
+    FIRE_DOWN,
+    DETECT_DANGER_PHEROMONE,
 };
 NEURONINPUTTYPE_VALUES(
         "HUNGER",
@@ -51,18 +56,23 @@ NEURONINPUTTYPE_VALUES(
         "ORGANISM_RIGHT",
         "ORGANISM_UP",
         "ORGANISM_DOWN",
-        "ORGANISM_COLLISION"
+        "ORGANISM_COLLISION",
+        "FIRE_LEFT",
+        "FIRE_RIGHT",
+        "FIRE_UP",
+        "FIRE_DOWN",
+        "DETECT_DANGER_PHEROMONE",
 );
 
 enum NeuronOutputType {
-    MOVE_LEFT = ORGANISM_COLLISION + 1,
+    MOVE_LEFT = FIRE_DOWN + 1,
     MOVE_RIGHT,
     MOVE_UP,
     MOVE_DOWN,
     EAT,
-
+    //EMIT_DANGER_PHEROMONE,
 };
-NEURONOUTPUTTYPE_VALUES("MOVE_LEFT", "MOVE_RIGHT", "MOVE_UP", "MOVE_DOWN", "EAT");
+NEURONOUTPUTTYPE_VALUES("MOVE_LEFT", "MOVE_RIGHT", "MOVE_UP", "MOVE_DOWN", "EAT",);
 
 struct NeuronConnection {
     std::shared_ptr<Neuron> neuronPtr;

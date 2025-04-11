@@ -9,6 +9,9 @@
 void Organism::mutateGenome() {
     Genome::mutateGenome(&genome);
     neuralNet = NeuralNet(genome);
+    color = {255, 85, 0, 255};
+    boundingBox.w = 10.0f;
+    boundingBox.h = 10.0f;
 }
 
 void Organism::update(const float deltaTime) {
@@ -27,12 +30,36 @@ void Organism::update(const float deltaTime) {
     }
 }
 
+void Organism::render(SDL_Renderer* renderer) const {
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    const SDL_FRect organismRect = {boundingBox.x, boundingBox.y, boundingBox.w, boundingBox.h};
+    SDL_RenderFillRect(renderer, &organismRect);
+
+    if(emitDangerPheromone) {
+        static std::mt19937 mt{std::random_device{}()};
+        std::uniform_int_distribution<int> distX(boundingBox.x - 10, boundingBox.x + 10);
+        std::uniform_int_distribution<int> distY(boundingBox.y - 10, boundingBox.y + 10);
+
+        SDL_SetRenderDrawColor(renderer, color.r - 100, color.g - 50, color.b + 100, color.a);
+        for(int i = 0; i < 10; i++) {
+            const SDL_FRect pheromoneRect = {static_cast<float>(distX(mt)), static_cast<float>(distY(mt)), 2, 2};
+            SDL_RenderFillRect(renderer, &pheromoneRect);
+        }
+    }
+}
+
 void Organism::handleTimer(const float deltaTime) {
     if(timer >= 1.00f) {
         hunger -= 10;
         age++;
 
-        if(hunger <= 0 || age >= maxAge) markedForDeletion = true;
+        if(age == maxAge) canReproduce = true;
+        if(hunger <= 0 || (age >= maxAge && !canReproduce)) {
+            markedForDeletion = true;
+            boundingBox.w = 12.0f;
+            boundingBox.h = 12.0f;
+            color = {255, 0, 0, 255};
+        }
 
         timer = 0.0f;
     }else timer += deltaTime;
@@ -69,6 +96,22 @@ void Organism::updateInputs() {
             case ORGANISM_COLLISION:
                 activation = isOrganismColliding() ? 1.0 : 0.0f;
                 break;
+            case FIRE_LEFT:
+            case FIRE_RIGHT:
+            case FIRE_UP:
+            case FIRE_DOWN:
+                activation = findNearbyFire(neuronID);
+                break;
+            case DETECT_DANGER_PHEROMONE: {
+                if(detectedDangerPheromone) {
+                    activation = 1.0f;
+                    detectedDangerPheromone = false;
+                }else {
+                    activation = 0.0f;
+                }
+                break;
+            }
+
             default:
                 activation = 1.00f;
                 break;
@@ -109,6 +152,14 @@ void Organism::updateFromOutputs(const float deltaTime) {
                 tryEat(activation);
                 break;
             }
+            //case EMIT_DANGER_PHEROMONE: {
+            //   if(activation >= 0.5f) {
+            //        emitDangerPheromone = true;
+            //    }else {
+            //        emitDangerPheromone = false;
+            //    }
+            //    break;
+            //}
             default: break;
         }
     }
@@ -142,30 +193,38 @@ bool Organism::isFoodColliding() const {
     return false;
 }
 
-float Organism::findNearbyOrganisms(NeuronInputType neuronID) const {
-    if(neighbors.empty()) return 0.0f;
+float Organism::findNearbyOrganisms(NeuronInputType neuronID) {
+    bool usingRaycast = false;
+    const std::vector<std::pair<uint64_t, Vec2>>* searchObjectsPtr;
+    if(!raycastNeighbors.empty()) {
+        searchObjectsPtr = &raycastNeighbors;
+        usingRaycast = true;
+    }else if(!neighbors.empty()){
+        searchObjectsPtr = &neighbors;
+    }else return 0.0f;
 
     float distance = NAN;
 
-    for(const auto& [neighborID, neighborDistance] : neighbors) {
+    for(const auto& [neighborID, neighborDistance] : *searchObjectsPtr) {
         std::shared_ptr<SimObject> objectPtr = (*simState.getFuncPtr)(neighborID);
         std::shared_ptr<Organism> organismPtr = std::dynamic_pointer_cast<Organism>(objectPtr);
         if(organismPtr) {
+            if(organismPtr->isEmittingDangerPheromone()) {detectedDangerPheromone = true;}
             switch(neuronID) {
                 case ORGANISM_LEFT:
-                    if(neighborDistance.x > 0.0f) continue;
+                    if(neighborDistance.x >= 0.0f) continue;
                     distance = -neighborDistance.x;
                     break;
                 case ORGANISM_RIGHT:
-                    if(neighborDistance.x < 0.0f) continue;
+                    if(neighborDistance.x <= 0.0f) continue;
                     distance = neighborDistance.x;
                     break;
                 case ORGANISM_UP:
-                    if(neighborDistance.y > 0.0f) continue;
+                    if(neighborDistance.y >= 0.0f) continue;
                     distance = -neighborDistance.y;
                     break;
                 case ORGANISM_DOWN:
-                    if(neighborDistance.y < 0.0f) continue;
+                    if(neighborDistance.y <= 0.0f) continue;
                     distance = neighborDistance.y;
                     break;
                 default: return 0.0f;
@@ -176,33 +235,46 @@ float Organism::findNearbyOrganisms(NeuronInputType neuronID) const {
     if(std::isnan(distance)) {
         return 0.0f;
     }
-    return 2.0f / (1.0f + std::exp(distance)); //distances approaching 0 result in values closer to 1.
+
+    //distances approaching 0 result in values closer to 1.
+    if(usingRaycast) {
+        return 2.0f / (1.0f + std::exp(distance * 0.0025f));
+    }else {
+        return 2.0f / (1.0f + std::exp(distance * 0.05f));
+    }
 }
 
 float Organism::findNearbyFood(NeuronInputType neuronID) const{
-    if(neighbors.empty()) return 0.0f;
+    bool usingRaycast = false;
+    const std::vector<std::pair<uint64_t, Vec2>>* searchObjectsPtr;
+    if(!raycastNeighbors.empty()) {
+        searchObjectsPtr = &raycastNeighbors;
+        usingRaycast = true;
+    }else if(!neighbors.empty()){
+        searchObjectsPtr = &neighbors;
+    }else return 0.0f;
 
     float distance = NAN;
 
-    for(const auto& [neighborID, neighborDistance] : neighbors) {
+    for(const auto& [neighborID, neighborDistance] : *searchObjectsPtr) {
         std::shared_ptr<SimObject> objectPtr = (*simState.getFuncPtr)(neighborID);
         std::shared_ptr<Food> foodPtr = std::dynamic_pointer_cast<Food>(objectPtr);
         if(foodPtr) {
             switch(neuronID) {
                 case FOOD_LEFT:
-                    if(neighborDistance.x > 0.0f) continue;
+                    if(neighborDistance.x >= 0.0f) continue;
                     distance = -neighborDistance.x;
                     break;
                 case FOOD_RIGHT:
-                    if(neighborDistance.x < 0.0f) continue;
+                    if(neighborDistance.x <= 0.0f) continue;
                     distance = neighborDistance.x;
                     break;
                 case FOOD_UP:
-                    if(neighborDistance.y > 0.0f) continue;
+                    if(neighborDistance.y >= 0.0f) continue;
                     distance = -neighborDistance.y;
                     break;
                 case FOOD_DOWN:
-                    if(neighborDistance.y < 0.0f) continue;
+                    if(neighborDistance.y <= 0.0f) continue;
                     distance = neighborDistance.y;
                     break;
                 default: return 0.0f;
@@ -213,7 +285,68 @@ float Organism::findNearbyFood(NeuronInputType neuronID) const{
     if(std::isnan(distance)) {
         return 0.0f;
     }
-    return 2.0f / (1.0f + std::exp(distance)); //distances approaching 0 result in values closer to 1.
+    //distances approaching 0 result in values closer to 1.
+    if(usingRaycast) {
+        return 2.0f / (1.0f + std::exp(distance * 0.0025f));
+    }else {
+        return 2.0f / (1.0f + std::exp(distance * 0.05f));
+    }
+}
+
+float Organism::findNearbyFire(NeuronInputType neuronID) {
+    bool usingRaycast = false;
+    const std::vector<std::pair<uint64_t, Vec2>>* searchObjectsPtr;
+    if(!raycastNeighbors.empty()) {
+        searchObjectsPtr = &raycastNeighbors;
+        usingRaycast = true;
+    }else if(!neighbors.empty()){
+        searchObjectsPtr = &neighbors;
+    }else return 0.0f;
+
+    float distance = NAN;
+
+    for(const auto& [neighborID, neighborDistance] : *searchObjectsPtr) {
+        std::shared_ptr<SimObject> objectPtr = (*simState.getFuncPtr)(neighborID);
+        std::shared_ptr<Fire> firePtr = std::dynamic_pointer_cast<Fire>(objectPtr);
+        if(firePtr) {
+            switch(neuronID) {
+                case FIRE_LEFT:
+                    if(neighborDistance.x >= 0.0f) continue;
+                    distance = -neighborDistance.x;
+                    break;
+                case FIRE_RIGHT:
+                    if(neighborDistance.x <= 0.0f) continue;
+                    distance = neighborDistance.x;
+                    break;
+                case FIRE_UP:
+                    if(neighborDistance.y >= 0.0f) continue;
+                    distance = -neighborDistance.y;
+                    break;
+                case FIRE_DOWN:
+                    if(neighborDistance.y <= 0.0f) continue;
+                    distance = neighborDistance.y;
+                    break;
+                default: return 0.0f;
+            }
+            break; //if we make it here the distance should always be set
+        }
+    }
+    if(std::isnan(distance)) {
+        return 0.0f;
+    }
+
+    if(distance <= 0.5f) {
+        emitDangerPheromone = true;
+    }else {
+        emitDangerPheromone = false;
+    }
+
+    //distances approaching 0 result in values closer to 1.
+    if(usingRaycast) {
+        return 2.0f / (1.0f + std::exp(distance * 0.0025f));
+    }else {
+        return 2.0f / (1.0f + std::exp(distance * 0.05f));
+    }
 }
 
 void Organism::tryEat(const float activation) {
@@ -223,7 +356,6 @@ void Organism::tryEat(const float activation) {
         std::shared_ptr<Food> foodPtr = std::dynamic_pointer_cast<Food>(objectPtr);
         if (foodPtr && !foodPtr->shouldDelete() && hunger < threshold) {
             hunger += foodPtr->getNutritionalValue();
-            canReproduce = true;
             if (hunger > 100) hunger = 100;
             foodPtr->markForDeletion();
         }

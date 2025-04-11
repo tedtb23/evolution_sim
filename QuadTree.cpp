@@ -120,6 +120,7 @@ std::vector<std::pair<uint64_t, Vec2>> QuadTree::getNearestNeighbors(const QuadT
            return neighbor1.second < neighbor2.second;
         }
     );
+    if(neighborsVec.size() > maxNeighbors) neighborsVec.erase(neighborsVec.begin() + maxNeighbors, neighborsVec.end());
     return neighborsVec;
 }
 
@@ -135,12 +136,102 @@ std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadT
             }
         }
     }else {
-        for(const QuadTreeObject& currObject : objects)
-            if(rangeIsNearRect(currObject.boundingBox, object.boundingBox) &&
-                currObject.id != object.id)
+        for(const QuadTreeObject& currObject : objects) {
+            if(
+                object.id != currObject.id &&
+                rangeIsNearRect(object.boundingBox, currObject.boundingBox)
+            ) {
+                const Vec2 currDistance = getMinDistanceBetweenRects(object.boundingBox, currObject.boundingBox);
+                if(currDistance == Vec2(0.0f, 0.0f)) continue;
+                if(neighbors.size() >= maxNeighborsInQuad) {
+                    for(const QuadTreeObject& neighbor : neighbors) {
+                        const Vec2 neighborDistance = getMinDistanceBetweenRects(object.boundingBox, neighbor.boundingBox);
+                        if(currDistance < neighborDistance) {
+                            neighbors.erase(neighbor);
+                            neighbors.emplace(currObject.id, currObject.boundingBox);
+                            break;
+                        }
+                    }
+                }else {
                     neighbors.emplace(currObject.id, currObject.boundingBox);
+                }
+            }
+        }
     }
     return neighbors;
+}
+
+std::vector<std::pair<uint64_t, Vec2>> QuadTree::raycast(const QuadTreeObject& object) const {
+    QuadTreeObjectSet raysNeighbors;
+    std::vector<std::pair<uint64_t, Vec2>> neighbors;
+    const float rayDistance = 200.0f;
+    const float rayWidth = 100.0f;
+    const float rayHeight = 100.0f;
+
+    std::array<SDL_FRect, directions.size()> rays = getRays(object, rayDistance, rayWidth, rayHeight);
+
+    for(int i = 0; i < directions.size(); i++) {
+        QuadTreeObjectSet rayNeighbors = queryInternal(QuadTreeObject(rays[i]));
+        raysNeighbors.merge(rayNeighbors);
+    }
+
+    neighbors.reserve(raysNeighbors.size());
+    std::transform(raysNeighbors.begin(), raysNeighbors.end(), std::back_inserter(neighbors),
+        [object](const QuadTreeObject& neighbor) {
+            Vec2 minDist = QuadTree::getMinDistanceBetweenRects(object.boundingBox, neighbor.boundingBox);
+            return std::make_pair(neighbor.id, minDist);
+        }
+    );
+
+    std::sort(neighbors.begin(), neighbors.end(),
+        [](const std::pair<uint64_t, Vec2>& neighbor1, const std::pair<uint64_t, Vec2>& neighbor2)-> bool{
+            //send neighbors with 0 distance to our object (collisions) to the back of the vector, so they
+            //don't take up space of actual neighbors.
+            if(neighbor1.second == Vec2(0.0f, 0.0f)) {
+                return false;
+            }else if(neighbor2.second == Vec2(0.0f, 0.0f)) {
+                return true;
+            }else {
+                return neighbor1.second < neighbor2.second;
+            }
+        }
+    );
+
+    if(neighbors.size() > maxNeighbors) neighbors.erase(neighbors.begin() + maxNeighbors, neighbors.end());
+
+    return neighbors;
+}
+
+std::array<SDL_FRect, 8> QuadTree::getRays(const QuadTreeObject& object, const float rayDistance, const float rayWidth, const float rayHeight) const {
+    std::array<SDL_FRect, directions.size()> rays{};
+
+    for(int i = 0; i < directions.size(); i++) {
+        rays[i] = getRay(directions[i], object, rayDistance, rayWidth, rayHeight);
+    }
+
+    return rays;
+}
+
+SDL_FRect QuadTree::getRay(const Vec2& direction, const QuadTreeObject& object, const float rayDistance, const float rayWidth, const float rayHeight) const{
+    float x, y;
+
+    if(direction.x == 0.0f) {
+        x = bounds.x;
+    }else if(direction.x < 0.0f) {
+        x = object.boundingBox.x - rayDistance < bounds.x ? bounds.x : object.boundingBox.x - rayDistance;
+    }else {
+        x = object.boundingBox.x + rayDistance > (bounds.x + bounds.w) - rayWidth ? (bounds.x + bounds.w) - rayWidth : object.boundingBox.x + rayDistance;
+    }
+
+    if(direction.y == 0.0f) {
+        y = object.boundingBox.y;
+    }else if(direction.y < 0.0f) {
+        y = object.boundingBox.y - rayDistance < bounds.y ? bounds.y : object.boundingBox.y - rayDistance;
+    }else {
+        y = object.boundingBox.y + rayDistance > (bounds.y + bounds.h) - rayHeight ? (bounds.y + bounds.h) - rayHeight : object.boundingBox.y + rayDistance;
+    }
+
+    return SDL_FRect{x, y, rayWidth, rayHeight};
 }
 
 /**
@@ -229,17 +320,17 @@ bool QuadTree::rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range
 }
 
 bool QuadTree::rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range) {
-    return !(range.x - (rect.x  +  rect.w)  > 20  ||
-             rect.x  - (range.x +  range.w) > 20  ||
-             range.y - (rect.y  +  rect.h)  > 20 ||
-             rect.y  - (range.y +  range.h) > 20 );
+    return !(range.x - (rect.x  +  rect.w) > isNearDistance ||
+             rect.x  - (range.x + range.w) > isNearDistance ||
+             range.y - (rect.y  +  rect.h) > isNearDistance ||
+             rect.y  - (range.y + range.h) > isNearDistance );
 }
 
 Vec2 QuadTree::getMinDistanceBetweenRects(const SDL_FRect& rect, const SDL_FRect& range) {
-    float distLeft = rect.x - (range.x + range.w);
-    float distRight = range.x - (rect.x + rect.w);
-    float distTop = rect.y - (range.y + range.h);
-    float distBottom = range.y - (rect.y + rect.h);
+    float distLeft   = rect.x  - (range.x + range.w);
+    float distRight  = range.x - (rect.x  + rect.w );
+    float distTop    = rect.y  - (range.y + range.h);
+    float distBottom = range.y - (rect.y  + rect.h );
     float distX, distY;
     if(distLeft < 0.0f && distRight < 0.0f) {
         distX = 0.0f;

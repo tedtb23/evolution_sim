@@ -7,7 +7,7 @@ struct Vec2 {
     float x;
     float y;
 
-    Vec2(const float x, const float y) : x(x), y(y) {};
+    constexpr Vec2(const float x, const float y) : x(x), y(y) {};
 
     [[nodiscard]] float getDistanceToOrigin() const {
         return static_cast<float>(sqrt((x*x) + (y*y)));

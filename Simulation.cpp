@@ -19,25 +19,97 @@ Simulation::Simulation(const SDL_Rect& simBounds, const uint16_t maxPopulation, 
         static_cast<float>(simBounds.y),
         static_cast<float>(simBounds.w),
         static_cast<float>(simBounds.h)}, 10);
+    currUserAction = UserActionType::NONE;
 
-    std::uniform_int_distribution<int> distX(simBounds.x, simBounds.x + simBounds.w);
-    std::uniform_int_distribution<int> distY(simBounds.y, simBounds.y + simBounds.h);
+    static SDL_Color color = {50, 0, 240, 255};
 
     for (int i = 0; i < maxPopulation; i++) {
         const uint64_t id = getRandomID();
+        const Vec2 initialPosition = getRandomPoint();
         const SDL_FRect boundingBox{
-            static_cast<float>(distX(mt)), static_cast<float>(distY(mt)), organismWidth, organismHeight
+            initialPosition.x, initialPosition.y, organismWidth, organismHeight
         };
         Organism organism(
                 id,
                 genomeSize,
+                color,
                 boundingBox,
                 SimState(
                         &markForDeletionLambda,
                         &getLambda, quadTreePtr));
         addOrganism(&organism);
+        color.r += 10;
+        color.b += 15;
     }
-    addFood(maxPopulation);
+    //for(int i = 0; i < 5; i++) {
+        //addFood(500);
+    //}
+    addFoodOnBorder(Vec2(1.0f, 0.0f));
+}
+
+Vec2 Simulation::getRandomPoint() const {
+    std::uniform_int_distribution<int> distX(simBounds.x, simBounds.x + simBounds.w);
+    std::uniform_int_distribution<int> distY(simBounds.y, simBounds.y + simBounds.h);
+    return {static_cast<float>(distX(mt)), static_cast<float>(distY(mt))};
+}
+
+void Simulation::addFire() {
+    std::uniform_int_distribution<int> distX(simBounds.x, (simBounds.x + simBounds.w) - 100);
+    std::uniform_int_distribution<int> distY(simBounds.y, (simBounds.y + simBounds.h) - 100);
+
+    const uint64_t id = getRandomID();
+    const SDL_FRect boundingBox{static_cast<float>(distX(mt)), static_cast<float>(distY(mt)), 100, 100};
+    SDL_Color color{252, 119, 3, 255};
+    Fire fire(
+            id,
+            boundingBox,
+            color,
+            SimState(
+                    &markForDeletionLambda,
+                    &getLambda, quadTreePtr));
+    quadTreePtr->insert(QuadTree::QuadTreeObject(id, boundingBox));
+    simObjects.emplace(id, std::make_shared<Fire>(std::move(fire)));
+}
+
+void Simulation::addFoodOnBorder(Vec2 direction) {
+    int amount = 500;
+    if(foodAmount + amount > maxPopulation) return;
+    foodAmount += amount;
+
+    std::uniform_int_distribution<int> distX;
+    std::uniform_int_distribution<int> distY;
+
+    if(direction == Vec2(1.0f, 0.0f)) {
+        distX.param(std::uniform_int_distribution<int>::param_type((simBounds.x + simBounds.w) - 100, (simBounds.x + simBounds.w) - (int)foodWidth));
+        distY.param(std::uniform_int_distribution<int>::param_type(simBounds.y, (simBounds.y + simBounds.h) - (int)foodHeight));
+    }else if(direction == Vec2(0.0f, -1.0f)) {
+        distX.param(std::uniform_int_distribution<int>::param_type(simBounds.x, (simBounds.x + simBounds.w) - (int)foodWidth));
+        distY.param(std::uniform_int_distribution<int>::param_type(simBounds.y, simBounds.y + 100));
+    }else if(direction == Vec2(-1.0f, 0.0f)) {
+        distX.param(std::uniform_int_distribution<int>::param_type(simBounds.x, simBounds.x + 100));
+        distY.param(std::uniform_int_distribution<int>::param_type(simBounds.y, (simBounds.y + simBounds.h) - (int)foodHeight));
+    }else if(direction == Vec2(0.0f, 1.0f)) {
+        distX.param(std::uniform_int_distribution<int>::param_type(simBounds.x, (simBounds.x + simBounds.w) - (int)foodWidth));
+        distY.param(std::uniform_int_distribution<int>::param_type((simBounds.y + simBounds.h) - 100, (simBounds.y + simBounds.h) - (int)foodHeight));
+    }else return;
+
+    for(int i = 0; i < amount; i++) {
+        const SDL_FRect foodBoundingBox{
+                static_cast<float>(distX(mt)), static_cast<float>(distY(mt)), foodWidth, foodHeight
+        };
+        SDL_Color color{0, 255, 0, 255};
+        const uint64_t foodID = getRandomID();
+        Food food(
+                foodID,
+                foodBoundingBox,
+                color,
+                100,
+                SimState(
+                        &markForDeletionLambda,
+                        &getLambda, quadTreePtr));
+        quadTreePtr->insert(QuadTree::QuadTreeObject(foodID, foodBoundingBox));
+        simObjects.emplace(foodID, std::make_shared<Food>(std::move(food)));
+    }
 }
 
 void Simulation::addFood(uint16_t amount) {
@@ -87,6 +159,9 @@ bool Simulation::shouldMutate() const {
 }
 
 void Simulation::render(SDL_Renderer *renderer) {
+    //SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
+    //SDL_FRect r{200.0f, 0.0f, 30.0f, 30.0f};
+    //SDL_RenderFillRect(renderer, &r);
     for(const auto & [id, object]: simObjects) {
        object->render(renderer);
     }
@@ -119,8 +194,8 @@ void Simulation::update(const SDL_Rect& newSimBounds, const float deltaTime) {
 
         if (objectPtr->shouldDelete()) {
             quadTreePtr->remove(QuadTree::QuadTreeObject(id, objectPtr->getBoundingBox()));
-            if (std::dynamic_pointer_cast<Organism>(simObjects[id])) population--;
-            if (std::dynamic_pointer_cast<Food>(simObjects[id])) foodAmount--;
+            if (organismPtr) population--;
+            if (std::dynamic_pointer_cast<Food>(objectPtr)) foodAmount--;
             itr = simObjects.erase(itr);
         } else {
             ++itr;
@@ -140,31 +215,54 @@ void Simulation::fixedUpdate() {
         const std::shared_ptr<Organism> organismPtr = std::dynamic_pointer_cast<Organism>(objectPtr);
         if(organismPtr) {
             organismPtr->clearNeighbors();
+            organismPtr->clearRaycastNeighbors();
             std::vector<std::pair<uint64_t, Vec2>> neighbors = quadTreePtr->getNearestNeighbors(
                     QuadTree::QuadTreeObject(
                             organismPtr->getID(),
                             organismPtr->getBoundingBox()));
-            organismPtr->addNeighbors(neighbors);
-            //for(const auto& [neighborID, neighborDistance] : neighbors) {
-            //    const std::shared_ptr<SimObject> neighborObjectPtr = simObjects[neighborID];
-            //    const std::shared_ptr<Organism> neighborOrganismPtr = std::dynamic_pointer_cast<Organism>(neighborObjectPtr);
-            //    if(neighborOrganismPtr) reproduceOrganisms(organismPtr, neighborOrganismPtr);
-            //}
-            if(shouldMutate())
-                organismPtr->mutateGenome();
+            if(neighbors.empty()) {
+                std::vector<std::pair<uint64_t, Vec2>> raycastNeighbors = quadTreePtr->raycast(
+                        QuadTree::QuadTreeObject(
+                                organismPtr->getID(),
+                                organismPtr->getBoundingBox()));
+                organismPtr->addRaycastNeighbors(raycastNeighbors);
+            }else {
+                organismPtr->addNeighbors(neighbors);
+            }
         }
     }
 }
 
 void Simulation::handleTimers(const float deltaTime) {
+    static int fireAmount = 0;
     if(foodTimer >= 15.0f) {
-        addFood(500);
+        //addFood(500);
+        addFoodOnBorder(Vec2(1.0f, 0.0f));
+        if(fireAmount < 10) addFire();
+        fireAmount++;
         foodTimer = 0.0f;
     }else foodTimer += deltaTime;
-    if(genTimer >= 5.0f) {
+    if(genTimer >= 10.0f) {
         createNextGeneration();
         genTimer = 0.0f;
     }else genTimer += deltaTime;
+    if(mutationTimer >= 5.0f) {
+            mutateOrganisms();
+        mutationTimer = 0.0f;
+    }else mutationTimer += deltaTime;
+    if(birthRateTimer >= 180.0f && !birthRateReduced) {
+        birthRate = std::make_pair(8, 10);
+        birthRateReduced = true;
+    }else birthRateTimer += deltaTime;
+}
+
+void Simulation::mutateOrganisms() {
+    for(const auto& [id, objectPtr] : simObjects) {
+        const std::shared_ptr organismPtr = std::dynamic_pointer_cast<Organism>(objectPtr);
+        if(organismPtr)
+            if(shouldMutate())
+                organismPtr->mutateGenome();
+    }
 }
 
 void Simulation::addOrganism(Organism* organismPtr) {
@@ -188,32 +286,36 @@ void Simulation::createNextGeneration() {
     if((size & 1) != 0)
         reproduceOrganisms(nextGenParents[size - 2], nextGenParents[size - 1]);
 
+    generationNum++;
+
     nextGenParents.clear();
 }
 
 void Simulation::reproduceOrganisms(const std::shared_ptr<Organism>& organism1Ptr, const std::shared_ptr<Organism>& organism2Ptr) {
-    static SDL_Color col = {100, 0, 0, 255};
-    if(population + 4 >= maxPopulation) return;
+    static SDL_Color color = {50, 0, 240, 255};
+    if(population + birthRate.second >= maxPopulation) return;
     if(!organism1Ptr->shouldReproduce() || !organism2Ptr->shouldReproduce()) return;
 
-    std::uniform_int_distribution<uint8_t> distNumChildren(3, 4);
+    std::uniform_int_distribution<uint8_t> distNumChildren(birthRate.first, birthRate.second);
     const uint8_t numChildren = distNumChildren(mt);
 
     organism1Ptr->reproduce();
     organism2Ptr->reproduce();
     for(int i = 0; i < numChildren; i++) {
         const uint64_t newID = getRandomID();
+        const Vec2 initialPosition = getRandomPoint();
         Organism newOrganism(
                 newID,
                 *organism1Ptr,
                 *organism2Ptr,
-                col,
+                color,
+                {initialPosition.x, initialPosition.y, organismWidth, organismHeight},
                 SimState(
                         &markForDeletionLambda,
                         &getLambda, quadTreePtr));
         addOrganism(&newOrganism);
-        col.r += 10;
-        col.b += 20;
+        color.r += 10;
+        color.b += 15;
     }
 }
 
@@ -262,25 +364,39 @@ void Simulation::checkBounds(const std::shared_ptr<SimObject>& objectPtr) const{
 
 
 void Simulation::handleCollision(const uint64_t id1, const uint64_t id2) {
-    std::shared_ptr<Organism> organism1Ptr = std::dynamic_pointer_cast<Organism>(simObjects[id1]);
-    std::shared_ptr<Organism> organism2Ptr = std::dynamic_pointer_cast<Organism>(simObjects[id2]);
+    std::shared_ptr<SimObject> object1Ptr(simObjects[id1]);
+    std::shared_ptr<SimObject> object2Ptr(simObjects[id2]);
+    std::shared_ptr<Organism> organism1Ptr = std::dynamic_pointer_cast<Organism>(object1Ptr);
+    std::shared_ptr<Organism> organism2Ptr = std::dynamic_pointer_cast<Organism>(object2Ptr);
+    std::shared_ptr<Fire> fire1Ptr = std::dynamic_pointer_cast<Fire>(object1Ptr);
+    std::shared_ptr<Fire> fire2Ptr = std::dynamic_pointer_cast<Fire>(object2Ptr);
+
+    //if(organism1Ptr && organism2Ptr) {
+    //    const Vec2& organism1Velocity = organism1Ptr->getVelocity();
+    //    const Vec2& organism2Velocity = organism2Ptr->getVelocity();
+    //    organism1Ptr->setVelocity({organism2Velocity.x * 0.50f, organism2Velocity.y * 0.50f});
+    //    organism2Ptr->setVelocity({organism1Velocity.x * 0.50f, organism1Velocity.y * 0.50f});
+    //    //SDL_FRect organism1BoundingBox = organism1Ptr->getBoundingBox();
+    //    //SDL_FRect organism2BoundingBox = organism2Ptr->getBoundingBox();
+    //}
+
+    if(fire1Ptr && !fire2Ptr) object2Ptr->markForDeletion();
+    if(fire2Ptr && !fire1Ptr) object1Ptr->markForDeletion();
 
     if(organism1Ptr) {
         organism1Ptr->addCollisionID(id2);
-        //organism1Ptr->setColor(SDL_Color {0, 0, 255, 255});
         const Vec2& organism1Velocity = organism1Ptr->getVelocity();
-        organism1Ptr->setVelocity({organism1Velocity.x * 0.50f, organism1Velocity.y * 0.50f});
+        organism1Ptr->setVelocity({organism1Velocity.x * 0.95f, organism1Velocity.y * 0.95f});
     }
     if(organism2Ptr) {
         organism2Ptr->addCollisionID(id1);
-        //organism2Ptr->setColor(SDL_Color {0, 0, 255, 255});
         const Vec2& organism2Velocity = organism2Ptr->getVelocity();
-        organism2Ptr->setVelocity({organism2Velocity.x * 0.50f, organism2Velocity.y * 0.50f});
+        organism2Ptr->setVelocity({organism2Velocity.x * 0.95f, organism2Velocity.y * 0.95f});
     }
 }
 
-SimData Simulation::userClicked(float mouseX, float mouseY) {
-    SimData result{};
+SimObjectData Simulation::userClicked(const float mouseX, const float mouseY) {
+    SimObjectData result{};
 
     std::vector<uint64_t> objectsClicked = quadTreePtr->query(
         QuadTree::QuadTreeObject(
@@ -293,6 +409,16 @@ SimData Simulation::userClicked(float mouseX, float mouseY) {
         }
     }
     return result;
+}
+
+SimObjectData Simulation::getFocusedSimObjectData() {
+    if(focusedSimObjectID == UINT64_MAX || !simObjects.contains(focusedSimObjectID)) return {};
+
+    const std::shared_ptr<SimObject> objectPtr = simObjects[focusedSimObjectID];
+    const std::shared_ptr<Organism> organismPtr = std::dynamic_pointer_cast<Organism>(objectPtr);
+
+    if(organismPtr) return getOrganismData(organismPtr);
+    return {}; //todo add more get methods for other types
 }
 
 OrganismData Simulation::getOrganismData(const std::shared_ptr<Organism>& organismPtr) {
@@ -318,8 +444,6 @@ OrganismData Simulation::getOrganismData(const std::shared_ptr<Organism>& organi
     }
 
     return {
-            organismPtr->getPosition().x,
-            organismPtr->getPosition().y,
             organismPtr->getID(),
             organismPtr->getHunger(), organismPtr->getAge(),
             inputActivations,

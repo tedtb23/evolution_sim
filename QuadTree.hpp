@@ -42,6 +42,7 @@ public:
 
     [[nodiscard]] std::vector<uint64_t> query(const QuadTreeObject& object) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> getNearestNeighbors(const QuadTreeObject& object) const;
+    [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> raycast(const QuadTreeObject& object) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, uint64_t>> getIntersections() const;
 
     void show(SDL_Renderer& renderer) const;
@@ -84,6 +85,19 @@ private:
 
     static constexpr float minWidth = 10.0f;
     static constexpr float minHeight = 10.0f;
+    static constexpr float isNearDistance = 20.0f;
+    static constexpr uint8_t maxNeighborsInQuad = 4;
+    static constexpr uint8_t maxNeighbors = 16;
+    static constexpr std::array<Vec2, 8> directions = {
+        Vec2(1.0f, -1.0f), //northeast
+        Vec2(0.0f, -1.0f), //north
+        Vec2(-1.0f, -1.0f), //northwest
+        Vec2(-1.0f, 0.0f), //west
+        Vec2(-1.0f, 1.0f), //southwest
+        Vec2(0.0f, 1.0f), //south
+        Vec2(1.0f, 1.0f), //southeast
+        Vec2(1.0f, 0.0f), //east
+    };
 
     using QuadTreeObjectPairSet = std::unordered_set<QuadTreeObjectPair, QuadTreeObjectPairHash>;
     using QuadTreeObjectSet = std::unordered_set<QuadTreeObject, QuadTreeObjectHash>;
@@ -97,7 +111,7 @@ private:
     [[nodiscard]] QuadTreeObjectPairSet getIntersectionsInternal() const;
     [[nodiscard]] QuadTreeObjectSet queryInternal(const QuadTreeObject& object) const;
     [[nodiscard]] QuadTreeObjectSet getNearestNeighborsInternal(const QuadTreeObject& object) const;
+    [[nodiscard]] std::array<SDL_FRect, 8> getRays(const QuadTreeObject& object, float rayDistance, float rayWidth, float rayHeight) const;
+    [[nodiscard]] SDL_FRect getRay(const Vec2& direction, const QuadTreeObject& object, float rayDistance, float rayWidth, float rayHeight) const;
 };
-
-
 #endif //QUADTREE_HPP

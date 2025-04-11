@@ -33,8 +33,6 @@ struct ClayData {
     std::shared_ptr<Simulation> simPtr;
     SimData simData;
     std::string fpsStr;
-    std::string quadTreeSizeStr;
-    std::string populationStr;
     int windowWidth;
     int windowHeight;
     SDL_Surface* pauseImageDataPtr;
@@ -66,9 +64,7 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
     if(pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
         const auto clayDataPtr = reinterpret_cast<ClayData*>(userData);
         const auto& simPtr = clayDataPtr->simPtr;
-        if(strcmp(elementID.stringId.chars, "Background") == 0) {
-            clayDataPtr->simData = simPtr->userClicked(pointerData.position.x, pointerData.position.y);
-        }else if(strcmp(elementID.stringId.chars, "Button_Add_Food") == 0) {
+        if(strcmp(elementID.stringId.chars, "Button_Add_Food") == 0) {
             simPtr->setUserAction(UserActionType::ADD_FOOD, UIData{});
         }else if(strcmp(elementID.stringId.chars, "Button_Show_QuadTree") == 0) {
             static bool quadIsShown = false;
@@ -82,7 +78,12 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
             else
                 simPtr->setUserAction(UserActionType::UNPAUSE, UIData{});
         }else if(strcmp(elementID.stringId.chars, "Button_Close_Organism_ToolTip") == 0) {
+            clayDataPtr->simPtr->setUserAction(UserActionType::UNFOCUS, {});
             clayDataPtr->simData = {};
+        }else if(strcmp(elementID.stringId.chars, "Background") == 0) {
+            clayDataPtr->simData.simObjectData = simPtr->userClicked(pointerData.position.x, pointerData.position.y);
+            const OrganismData* organismDataPtr = std::get_if<OrganismData>(&clayDataPtr->simData.simObjectData);
+            if(organismDataPtr) simPtr->setUserAction(UserActionType::FOCUS, organismDataPtr->id);
         }
     }
 }
@@ -166,7 +167,23 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                 },
                 .backgroundColor = COLOR_LIGHT
             }) {
-                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(dataPtr->populationStr.length()), .chars = dataPtr->populationStr.c_str()}),
+                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(dataPtr->simData.populationStr.length()), .chars = dataPtr->simData.populationStr.c_str()}),
+                    CLAY_TEXT_CONFIG({
+                        .textColor = COLOR_BLACK,
+                        .fontId = FONT_SMALL,
+                        .fontSize = 0,
+                    })
+                );
+            }
+            CLAY({
+                .id = CLAY_ID("Generation_Container"),
+                .layout = {
+                   .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                   .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER},
+                },
+                .backgroundColor = COLOR_LIGHT
+            }) {
+                CLAY_TEXT(((Clay_String) {.length = static_cast<int32_t>(dataPtr->simData.generationStr.length()), .chars = dataPtr->simData.generationStr.c_str()}),
                     CLAY_TEXT_CONFIG({
                         .textColor = COLOR_BLACK,
                         .fontId = FONT_SMALL,
@@ -228,7 +245,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     },
                     .backgroundColor = COLOR_LIGHT
                 }) {
-                    CLAY_TEXT(((Clay_String){.length = static_cast<int32_t>(dataPtr->quadTreeSizeStr.length()), .chars = dataPtr->quadTreeSizeStr.c_str()}),
+                    CLAY_TEXT(((Clay_String){.length = static_cast<int32_t>(dataPtr->simData.quadTreeSizeStr.length()), .chars = dataPtr->simData.quadTreeSizeStr.c_str()}),
                          CLAY_TEXT_CONFIG({
                              .textColor = COLOR_BLACK,
                              .fontId = FONT_SMALL,
@@ -237,12 +254,12 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     );
                 }
         }
-        if(!std::get<OrganismData>(dataPtr->simData).organismInfoStr.empty())
+        if(!std::get<OrganismData>(dataPtr->simData.simObjectData).organismInfoStr.empty())
             CLAY({
                 .id = CLAY_ID("Organism_ToolTip"),
                 .layout = {
                     .sizing = {
-                        .width = CLAY_SIZING_FIT(200, 400),
+                        .width = CLAY_SIZING_FIT(250, 450),
                         .height = CLAY_SIZING_FIT(200, 600),
                     },
                     .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
@@ -284,8 +301,8 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     },
                 }) {
                     CLAY_TEXT(((Clay_String){
-                        .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData).organismInfoStr.length()),
-                        .chars = std::get<OrganismData>(dataPtr->simData).organismInfoStr.c_str()}),
+                        .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData.simObjectData).organismInfoStr.length()),
+                        .chars = std::get<OrganismData>(dataPtr->simData.simObjectData).organismInfoStr.c_str()}),
                         CLAY_TEXT_CONFIG({
                             .textColor = COLOR_BLACK,
                             .fontId = FONT_SMALL,
@@ -300,8 +317,8 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     },
                 }) {
                     CLAY_TEXT(((Clay_String){
-                        .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData).neuralNetInputStr.length()),
-                        .chars = std::get<OrganismData>(dataPtr->simData).neuralNetInputStr.c_str()}),
+                        .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData.simObjectData).neuralNetInputStr.length()),
+                        .chars = std::get<OrganismData>(dataPtr->simData.simObjectData).neuralNetInputStr.c_str()}),
                         CLAY_TEXT_CONFIG({
                             .textColor = COLOR_BLACK,
                             .fontId = FONT_SMALL,
@@ -316,8 +333,8 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     },
                 }) {
                     CLAY_TEXT(((Clay_String){
-                            .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData).neuralNetOutputStr.length()),
-                            .chars = std::get<OrganismData>(dataPtr->simData).neuralNetOutputStr.c_str()}),
+                            .length = static_cast<int32_t>(std::get<OrganismData>(dataPtr->simData.simObjectData).neuralNetOutputStr.length()),
+                            .chars = std::get<OrganismData>(dataPtr->simData.simObjectData).neuralNetOutputStr.c_str()}),
                             CLAY_TEXT_CONFIG({
                                 .textColor = COLOR_BLACK,
                                 .fontId = FONT_SMALL,
@@ -425,14 +442,16 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     statePtr->simPtr = std::make_shared<Simulation>(
             SDL_Rect {200, 0, width - 200, height - 0},
             1000,
-            20,
-            0.05f);
+            30,
+            0.01f);
     statePtr->clayData = ClayData{
             statePtr->simPtr,
-            {},
+            {
+                {},
+                std::string("QuadTree Size: 0"),
+                std::string("Population: 0"),
+                },
             std::string("FPS: 0"),
-            std::string("QuadTree Size: 0"),
-            std::string("Population: 0"),
             width,
             height,
             pauseImageSurface,
@@ -490,6 +509,7 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     std::stringstream fpsStream;
     std::stringstream quadSizeStream;
     std::stringstream populationStream;
+    std::stringstream generationStream;
 
     if(timeAccumForFixedUpdate >= 0.016f) {
         statePtr->simPtr->fixedUpdate();
@@ -507,13 +527,17 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
         fpsStream << "FPS: " << std::fixed << std::setprecision(2) << (1.0f / deltaTime);
         quadSizeStream << "QuadTree Size: " << statePtr->simPtr->getQuadSize();
         populationStream << "Population: " << statePtr->simPtr->getCurrentPopulation();
+        generationStream << "Generation: " << statePtr->simPtr->getCurrentGeneration();
 
         statePtr->clayData.fpsStr =fpsStream.str();
         fpsStream.clear();
-        statePtr->clayData.quadTreeSizeStr = quadSizeStream.str();
+        statePtr->clayData.simData.quadTreeSizeStr = quadSizeStream.str();
         quadSizeStream.clear();
-        statePtr->clayData.populationStr = populationStream.str();
+        statePtr->clayData.simData.populationStr = populationStream.str();
         populationStream.clear();
+        statePtr->clayData.simData.generationStr = generationStream.str();
+        generationStream.clear();
+        statePtr->clayData.simData.simObjectData = statePtr->simPtr->getFocusedSimObjectData();
     }else timeAccumForTextUpdate += deltaTime;
 
     statePtr->clayData.windowWidth = width;
