@@ -58,7 +58,7 @@ namespace Genome {
         return distWeightBias(mt);
     }
 
-    inline Genome createRandomGenome(const int size) {
+    inline Genome createRandomGenome(const uint16_t size) {
         assert(size > 0 && size <= 1000);
 
         Genome genome {

@@ -33,7 +33,7 @@ struct SimData {
 
 enum class UserActionType {
     NONE,
-    ADD_FOOD,
+    CHANGE_FOOD_RANGE,
     PAUSE,
     UNPAUSE,
     FOCUS,

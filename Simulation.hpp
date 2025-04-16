@@ -28,10 +28,13 @@ public:
     void showQuadTree(bool setQuadTreeVisible) {quadTreeVisible = setQuadTreeVisible;}
     [[nodiscard]] bool quadTreeIsShown() const {return quadTreeVisible;}
     [[nodiscard]] size_t getQuadSize() const {return quadTreePtr->size();}
+    bool contains(const uint64_t id) {return simObjects.contains(id);}
 
 private:
     uint64_t generationNum = 0;
     uint16_t foodAmount = 0;
+    uint16_t foodSpawnAmount = 500;
+    SDL_Rect foodSpawnRange;
     uint16_t population = 0;
     const uint16_t maxPopulation;
     float foodTimer = 0.0f;
@@ -43,15 +46,24 @@ private:
     bool paused = false;
     float mutationFactor;
 
-    UserActionType currUserAction;
+    UserActionType currUserAction = UserActionType::NONE;
 
     uint64_t focusedSimObjectID = UINT64_MAX;
 
     std::unordered_map<uint64_t, std::shared_ptr<SimObject>> simObjects;
+    std::unordered_map<uint64_t, std::shared_ptr<Organism>> organisms;
     std::vector<std::shared_ptr<Organism>> nextGenParents;
     static std::mt19937 mt;
+    void markForDeletion(const uint64_t id) {simObjects[id]->markForDeletion();}
+    std::shared_ptr<SimObject> get(const uint64_t id) {
+        if(!simObjects.contains(id)) return nullptr;
+        return simObjects[id];
+    }
+    std::function<void (uint64_t id)> markForDeletionLambda = [this] (const uint64_t id) {this->markForDeletion(id);};
+    std::function<std::shared_ptr<SimObject> (uint64_t id)> getLambda = [this] (const uint64_t id) {return this->get(id);};
     SDL_Rect simBounds;
     std::shared_ptr<QuadTree> quadTreePtr;
+    SimState simState;
     bool quadTreeVisible = false;
 
     static constexpr float clickWidth = 8.0f;
@@ -66,9 +78,19 @@ private:
     void createNextGeneration();
 
     void addFire();
-    void addFoodOnBorder(Vec2 direction);
-    void addFood(uint16_t amount);
-    void addOrganism(Organism* organismPtr);
+    void addFood();
+    void addSimObject(const std::shared_ptr<SimObject>& simObjectPtr);
+    void addOrganism(
+            uint64_t id,
+            uint16_t genomeSize,
+            const SDL_Color& initialColor,
+            const SDL_FRect& boundingBox);
+    void addOrganism(
+            uint64_t id,
+            const Organism& parent1,
+            const Organism& parent2,
+            const SDL_Color& initialColor,
+            const SDL_FRect& boundingBox);
     void removeOrganism(uint64_t id);
     void reproduceOrganisms(const std::shared_ptr<Organism>& organism1Ptr, const std::shared_ptr<Organism>& organism2Ptr);
     void mutateOrganisms();
@@ -81,11 +103,11 @@ private:
             this->mutationFactor = newMutationFactor;
     }
 
-    void handleAddFood();
+    void handleChangeFoodRange(const UIData& uiData);
 
     std::array<std::function<void (const UIData&)>, static_cast<size_t>(UserActionType::SIZE)> userActionFuncMapping = {
         [] (const UIData& uiData) {}, //none
-        [this] (const UIData& uiData) {handleAddFood();}, //add_food
+        [this] (const UIData& uiData) {handleChangeFoodRange(uiData);}, //change_food_range
         [this] (const UIData& uiData) {paused = true;}, //pause
         [this] (const UIData& uiData) { //unpause
             paused = false;
@@ -103,24 +125,13 @@ private:
         },
         [this] (const UIData& uiData) { //unfocus
             setUserAction(UserActionType::NONE, uiData);
-            if(focusedSimObjectID == UINT64_MAX) {
-                return;
-            }else if(!simObjects.contains(focusedSimObjectID)) {
-                focusedSimObjectID = UINT64_MAX;
-                return;
+            if(simObjects.contains(focusedSimObjectID)) {
+                simObjects[focusedSimObjectID]->setColor({0,0, 0, 255});
             }
-            simObjects[focusedSimObjectID]->setColor({0,0, 0, 255});
             focusedSimObjectID = UINT64_MAX;
         },
     };
 
-    void markForDeletion(const uint64_t id) {simObjects[id]->markForDeletion();}
-    std::shared_ptr<SimObject> get(const uint64_t id) {
-        if(!simObjects.contains(id)) return nullptr;
-        return simObjects[id];
-    }
-    std::function<void (uint64_t id)> markForDeletionLambda = [this] (const uint64_t id) {this->markForDeletion(id);};
-    std::function<std::shared_ptr<SimObject> (uint64_t id)> getLambda = [this] (const uint64_t id) {return this->get(id);};
     std::function<void()> currUserActionFunc = [this] () {userActionFuncMapping[0](UIData());};
     Vec2 getRandomPoint() const;
     static uint64_t getRandomID();

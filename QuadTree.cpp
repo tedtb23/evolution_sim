@@ -164,7 +164,7 @@ std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadT
 std::vector<std::pair<uint64_t, Vec2>> QuadTree::raycast(const QuadTreeObject& object) const {
     QuadTreeObjectSet raysNeighbors;
     std::vector<std::pair<uint64_t, Vec2>> neighbors;
-    const float rayDistance = 200.0f;
+    const float rayDistance = 300.0f;
     const float rayWidth = 100.0f;
     const float rayHeight = 100.0f;
 

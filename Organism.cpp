@@ -122,7 +122,7 @@ void Organism::updateInputs() {
 
 void Organism::updateFromOutputs(const float deltaTime) {
     for(auto & [neuronID, activation] : neuralNet.getOutputActivations()) {
-        if(activation < 0.50f) continue;
+        //if(activation < 0.50f) continue;
         switch(neuronID) {
             case MOVE_LEFT: {
                 Vec2 moveVelocity = velocity;

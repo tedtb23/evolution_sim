@@ -15,7 +15,7 @@
 class Organism : public SimObject{
 public:
     Organism(const uint64_t id,
-        const int genomeSize,
+        const uint16_t genomeSize,
         const SDL_Color& initialColor,
         const SDL_FRect& boundingBox,
         const SimState& simState)
@@ -40,9 +40,9 @@ public:
     static constexpr float acceleration = 6.0f;
     static constexpr float velocityMax = 9.0f;
     static constexpr float velocityDecay = 0.9f;
-    static constexpr int maxAge = 15;
+    static constexpr uint8_t maxAge = 15;
 
-    bool isEmittingDangerPheromone() {return emitDangerPheromone;}
+    bool isEmittingDangerPheromone() const {return emitDangerPheromone;}
     void addRaycastNeighbors(const std::vector<std::pair<uint64_t, Vec2>>& newRaycastNeighbors) {raycastNeighbors = newRaycastNeighbors;}
     void addNeighbors(const std::vector<std::pair<uint64_t, Vec2>>& newNeighbors) {neighbors = newNeighbors;}
     void clearRaycastNeighbors() {raycastNeighbors.clear();}

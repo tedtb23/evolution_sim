@@ -17,10 +17,6 @@ float NeuralNet::convertRawWeightOrBias(const uint16_t rawValue) {
 }
 
 NeuralNet::NeuralNet(const Genome::Genome& genome) {
-    //inputNeurons.reserve(genome.biases.size() / 2);
-    //hiddenNeurons.reserve(genome.biases.size() / 2);
-    //outputNeurons.reserve(genome.biases.size() / 2);
-
     for(const auto & [connectionID, rawWeight] : genome.connections) {
         const auto sourceFullID =
             static_cast<uint8_t>(connectionID >> 8);

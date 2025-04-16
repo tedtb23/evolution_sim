@@ -64,8 +64,14 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
     if(pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
         const auto clayDataPtr = reinterpret_cast<ClayData*>(userData);
         const auto& simPtr = clayDataPtr->simPtr;
-        if(strcmp(elementID.stringId.chars, "Button_Add_Food") == 0) {
-            simPtr->setUserAction(UserActionType::ADD_FOOD, UIData{});
+        if(strcmp(elementID.stringId.chars, "Button_Change_Food_Range") == 0) {
+            static bool clicked = false;
+            clicked = !clicked;
+            if(clicked) {
+                simPtr->setUserAction(UserActionType::CHANGE_FOOD_RANGE, UIData{});
+            }else {
+                simPtr->setUserAction(UserActionType::NONE, UIData{});
+            }
         }else if(strcmp(elementID.stringId.chars, "Button_Show_QuadTree") == 0) {
             static bool quadIsShown = false;
             quadIsShown = !quadIsShown;
@@ -83,7 +89,7 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
         }else if(strcmp(elementID.stringId.chars, "Background") == 0) {
             clayDataPtr->simData.simObjectData = simPtr->userClicked(pointerData.position.x, pointerData.position.y);
             const OrganismData* organismDataPtr = std::get_if<OrganismData>(&clayDataPtr->simData.simObjectData);
-            if(organismDataPtr) simPtr->setUserAction(UserActionType::FOCUS, organismDataPtr->id);
+            if(organismDataPtr && simPtr->contains(organismDataPtr->id)) simPtr->setUserAction(UserActionType::FOCUS, organismDataPtr->id);
         }
     }
 }
@@ -192,7 +198,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                 );
             }
             CLAY({
-                .id = CLAY_ID("Button_Add_Food"),
+                .id = CLAY_ID("Button_Change_Food_Range"),
                 .layout = {
                     .sizing = {
                         .width = {100.0f},
@@ -202,17 +208,24 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     .childAlignment = {
                         .x = CLAY_ALIGN_X_CENTER,
                         .y = CLAY_ALIGN_Y_CENTER,
-                    }
+                    },
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
                 .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
                 Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
-                CLAY_TEXT(CLAY_STRING("Add Food"),
-                          CLAY_TEXT_CONFIG({
-                              .textColor = COLOR_BLACK,
-                              .fontId = FONT_MEDIUM,
-                              .fontSize = 0,
-                              }));
+                CLAY_TEXT(CLAY_STRING("Change Food"),
+                    CLAY_TEXT_CONFIG({
+                        .textColor = COLOR_BLACK,
+                        .fontId = FONT_SMALL,
+                        .fontSize = 0,
+                }));
+                CLAY_TEXT(CLAY_STRING("Spawn Range"),
+                    CLAY_TEXT_CONFIG({
+                        .textColor = COLOR_BLACK,
+                        .fontId = FONT_SMALL,
+                        .fontSize = 0,
+                }));
             }
             CLAY({
                 .id = CLAY_ID("Button_Show_QuadTree"),
@@ -226,10 +239,10 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                 .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
                 Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
-                CLAY_TEXT(CLAY_STRING("Show_QuadTree"),
+                CLAY_TEXT(CLAY_STRING("Show QuadTree"),
                     CLAY_TEXT_CONFIG({
                         .textColor = COLOR_BLACK,
-                        .fontId = FONT_MEDIUM,
+                        .fontId = FONT_SMALL,
                         .fontSize = 0,
                         .wrapMode = CLAY_TEXT_WRAP_NONE,
                     }));
@@ -385,7 +398,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     }
     statePtr->rendererData.renderer = statePtr->rendererPtr;
     SDL_SetWindowResizable(statePtr->windowPtr, true);
-    SDL_SetWindowMinimumSize(statePtr->windowPtr, 640, 480);
+    SDL_SetWindowMinimumSize(statePtr->windowPtr, 700, 480);
 
     statePtr->rendererData.textEngine = TTF_CreateRendererTextEngine(statePtr->rendererPtr);
     if (!statePtr->rendererData.textEngine) {
