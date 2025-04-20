@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <sstream>
+#include <cassert>
 #include "SDL3/SDL.h"
 #include "QuadTree.hpp"
 #include "UtilityStructs.hpp"
@@ -28,7 +29,7 @@ void QuadTree::insert(const QuadTreeObject& object) {
     if(!rangeIntersectsRect(bounds, object.boundingBox)) return;
     if(divided) {
         insertIntoSubTree(object);
-    }else if(objects.size() < granularity || bounds.w / 2.0f <= minWidth || bounds.h / 2.0f <= minHeight) {
+    }else if(objects.size() < granularity || bounds.w * 0.5f <= minWidth || bounds.h * 0.5f <= minHeight) {
         if(std::find(objects.begin(), objects.end(), object) == objects.end()) objects.push_back(object);
     }else {
         divided = true;
@@ -64,8 +65,9 @@ void QuadTree::remove(const QuadTreeObject& object) {
     }
 }
 
-std::vector<std::pair<uint64_t, uint64_t>> QuadTree::getIntersections() const{
-    QuadTreeObjectPairSet collisions = getIntersectionsInternal();
+std::vector<std::pair<uint64_t, uint64_t>> QuadTree::getIntersections() const {
+    QuadTreeObjectPairSet collisions;
+    getIntersectionsInternal(&collisions);
     std::vector<std::pair<uint64_t, uint64_t>> ids;
     ids.reserve(collisions.size());
     std::transform(collisions.begin(), collisions.end(), std::back_inserter(ids),
@@ -76,14 +78,10 @@ std::vector<std::pair<uint64_t, uint64_t>> QuadTree::getIntersections() const{
     return ids;
 }
 
-std::unordered_set<QuadTree::QuadTreeObjectPair, QuadTree::QuadTreeObjectPairHash> QuadTree::getIntersectionsInternal() const{
-    QuadTreeObjectPairSet collisions;
-
+void QuadTree::getIntersectionsInternal(QuadTreeObjectPairSet* collisionsPtr) const {
     if(divided) {
         for(const auto & childPtr : children) {
-            QuadTreeObjectPairSet childCollisions;
-            childCollisions = childPtr->getIntersectionsInternal();
-            collisions.merge(childCollisions);
+            childPtr->getIntersectionsInternal(collisionsPtr);
         }
     }else {
         for(int i = 0; i < objects.size(); i++) {
@@ -91,11 +89,10 @@ std::unordered_set<QuadTree::QuadTreeObjectPair, QuadTree::QuadTreeObjectPairHas
             for(int j = i + 1; j < objects.size(); j++) {
                 const QuadTreeObject& otherObject = objects[j];
                 if(rangeIntersectsRect(otherObject.boundingBox, currObject.boundingBox))
-                    collisions.emplace(currObject, otherObject);
+                    collisionsPtr->emplace(currObject, otherObject);
             }
         }
     }
-    return collisions;
 }
 
 /**
@@ -106,7 +103,8 @@ std::unordered_set<QuadTree::QuadTreeObjectPair, QuadTree::QuadTreeObjectPairHas
 std::vector<std::pair<uint64_t, Vec2>> QuadTree::getNearestNeighbors(const QuadTreeObject& object) const{
     if(!rangeIntersectsRect(bounds, object.boundingBox)) return {};
 
-    QuadTreeObjectSet neighbors = getNearestNeighborsInternal(object);
+    QuadTreeObjectSet neighbors;
+    getNearestNeighborsInternal(object, &neighbors);
     std::vector<std::pair<uint64_t, Vec2>> neighborsVec;
     neighborsVec.reserve(neighbors.size());
     std::transform(neighbors.begin(), neighbors.end(), std::back_inserter(neighborsVec),
@@ -124,15 +122,11 @@ std::vector<std::pair<uint64_t, Vec2>> QuadTree::getNearestNeighbors(const QuadT
     return neighborsVec;
 }
 
-std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadTree::getNearestNeighborsInternal(const QuadTreeObject& object) const{
-    QuadTreeObjectSet neighbors;
-
+void QuadTree::getNearestNeighborsInternal(const QuadTreeObject& object, QuadTreeObjectSet* neighborsPtr) const {
     if(divided) {
         for(const auto& childPtr : children) {
             if(rangeIntersectsRect(childPtr->bounds, object.boundingBox) || rangeIsNearRect(childPtr->bounds, object.boundingBox)) {
-                QuadTreeObjectSet childNeighbors;
-                childNeighbors = childPtr->getNearestNeighborsInternal(object);
-                neighbors.merge(childNeighbors);
+                childPtr->getNearestNeighborsInternal(object, neighborsPtr);
             }
         }
     }else {
@@ -143,92 +137,108 @@ std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadT
             ) {
                 const Vec2 currDistance = getMinDistanceBetweenRects(object.boundingBox, currObject.boundingBox);
                 if(currDistance == Vec2(0.0f, 0.0f)) continue;
-                if(neighbors.size() >= maxNeighborsInQuad) {
-                    for(const QuadTreeObject& neighbor : neighbors) {
+                if(neighborsPtr->size() >= maxNeighborsInQuad) {
+                    for(const QuadTreeObject& neighbor : *neighborsPtr) {
                         const Vec2 neighborDistance = getMinDistanceBetweenRects(object.boundingBox, neighbor.boundingBox);
-                        if(currDistance < neighborDistance) {
-                            neighbors.erase(neighbor);
-                            neighbors.emplace(currObject.id, currObject.boundingBox);
+                        if(currDistance < neighborDistance || currObject.highPriority) {
+                            neighborsPtr->erase(neighbor);
+                            neighborsPtr->emplace(currObject.id, currObject.boundingBox);
                             break;
                         }
                     }
                 }else {
-                    neighbors.emplace(currObject.id, currObject.boundingBox);
+                    neighborsPtr->emplace(currObject.id, currObject.boundingBox);
                 }
             }
         }
     }
-    return neighbors;
 }
 
-std::vector<std::pair<uint64_t, Vec2>> QuadTree::raycast(const QuadTreeObject& object) const {
-    QuadTreeObjectSet raysNeighbors;
-    std::vector<std::pair<uint64_t, Vec2>> neighbors;
-    const float rayDistance = 300.0f;
-    const float rayWidth = 100.0f;
-    const float rayHeight = 100.0f;
+std::vector<std::pair<uint64_t, Vec2>> QuadTree::raycast(const QuadTreeObject& object, Vec2 velocityCopy) const {
+    const float rayDistance = 400.0f;
 
-    std::array<SDL_FRect, directions.size()> rays = getRays(object, rayDistance, rayWidth, rayHeight);
+    if(std::max(std::abs(velocityCopy.x), std::abs(velocityCopy.y)) == std::abs(velocityCopy.x)) {
+        velocityCopy.y = 0.0f;
+    }else velocityCopy.x = 0.0f;
 
-    for(int i = 0; i < directions.size(); i++) {
-        QuadTreeObjectSet rayNeighbors = queryInternal(QuadTreeObject(rays[i]));
-        raysNeighbors.merge(rayNeighbors);
-    }
+    auto closeNeighbors = raycastInternal(object, velocityCopy, rayDistance);
+    return closeNeighbors;
+}
 
-    neighbors.reserve(raysNeighbors.size());
-    std::transform(raysNeighbors.begin(), raysNeighbors.end(), std::back_inserter(neighbors),
-        [object](const QuadTreeObject& neighbor) {
+std::vector<std::pair<uint64_t, Vec2>> QuadTree::raycastInternal(
+        const QuadTreeObject& object,
+        const Vec2& velocity,
+        const float rayDistance) const {
+    QuadTreeObjectSet rayCollisions;
+    std::vector<std::pair<uint64_t, Vec2>> result;
+    std::unordered_map<uint64_t, bool> priorities;
+
+    queryInternal(
+            QuadTreeObject(getRay(velocity, object, rayDistance)),
+            &rayCollisions);
+
+    result.reserve(rayCollisions.size());
+    std::transform(rayCollisions.begin(), rayCollisions.end(), std::back_inserter(result),
+        [&object, &priorities](const QuadTreeObject& neighbor) {
             Vec2 minDist = QuadTree::getMinDistanceBetweenRects(object.boundingBox, neighbor.boundingBox);
+            priorities[neighbor.id] = neighbor.highPriority;
+
             return std::make_pair(neighbor.id, minDist);
         }
     );
 
-    std::sort(neighbors.begin(), neighbors.end(),
-        [](const std::pair<uint64_t, Vec2>& neighbor1, const std::pair<uint64_t, Vec2>& neighbor2)-> bool{
-            //send neighbors with 0 distance to our object (collisions) to the back of the vector, so they
-            //don't take up space of actual neighbors.
-            if(neighbor1.second == Vec2(0.0f, 0.0f)) {
-                return false;
-            }else if(neighbor2.second == Vec2(0.0f, 0.0f)) {
-                return true;
-            }else {
-                return neighbor1.second < neighbor2.second;
-            }
-        }
+    std::sort(result.begin(), result.end(),
+              [](const std::pair<uint64_t, Vec2>& neighbor1, const std::pair<uint64_t, Vec2>& neighbor2)-> bool{
+                  //send neighbors with 0 distance to our object (collisions) to the back of the vector, so they
+                  //don't take up space of actual neighbors.
+                  if(neighbor1.second == Vec2(0.0f, 0.0f)) {
+                      return false;
+                  }else if(neighbor2.second == Vec2(0.0f, 0.0f)) {
+                      return true;
+                  }else {
+                      return neighbor1.second < neighbor2.second;
+                  }
+              }
     );
 
-    if(neighbors.size() > maxNeighbors) neighbors.erase(neighbors.begin() + maxNeighbors, neighbors.end());
+    std::stable_sort(result.begin(), result.end(),
+        [&priorities](const std::pair<uint64_t, Vec2>& neighbor1, const std::pair<uint64_t, Vec2>& neighbor2)-> bool{
+        if(!priorities.contains(neighbor1.first) || !priorities.contains(neighbor2.first)) return false;
+        return priorities.at(neighbor1.first) && !priorities.at(neighbor2.first);
+    });
 
-    return neighbors;
+    if(result.size() > maxNeighbors) result.erase(result.begin() + maxNeighbors, result.end());
+
+    return result;
 }
 
-std::array<SDL_FRect, 8> QuadTree::getRays(const QuadTreeObject& object, const float rayDistance, const float rayWidth, const float rayHeight) const {
-    std::array<SDL_FRect, directions.size()> rays{};
-
-    for(int i = 0; i < directions.size(); i++) {
-        rays[i] = getRay(directions[i], object, rayDistance, rayWidth, rayHeight);
-    }
-
-    return rays;
-}
-
-SDL_FRect QuadTree::getRay(const Vec2& direction, const QuadTreeObject& object, const float rayDistance, const float rayWidth, const float rayHeight) const{
+SDL_FRect QuadTree::getRay(const Vec2& direction, const QuadTreeObject& object, float rayDistance) const{
+    assert(rayDistance > object.boundingBox.w && rayDistance > object.boundingBox.h);
     float x, y;
+    float rayWidth = rayDistance, rayHeight = rayDistance;
 
     if(direction.x == 0.0f) {
-        x = bounds.x;
-    }else if(direction.x < 0.0f) {
-        x = object.boundingBox.x - rayDistance < bounds.x ? bounds.x : object.boundingBox.x - rayDistance;
-    }else {
-        x = object.boundingBox.x + rayDistance > (bounds.x + bounds.w) - rayWidth ? (bounds.x + bounds.w) - rayWidth : object.boundingBox.x + rayDistance;
+        rayWidth *= 0.10f;
+        float potentialX = object.boundingBox.x - ((rayWidth * 0.5f) + (object.boundingBox.w * 0.5f));
+        x = potentialX < bounds.x ? bounds.x : potentialX;
+    }else if(std::signbit(direction.x)) { //left ray
+        float potentialX = object.boundingBox.x - rayDistance;
+        x = potentialX < bounds.x ? bounds.x : potentialX;
+    }else { //right ray
+        x = object.boundingBox.x + object.boundingBox.w;
+        rayWidth = x + rayDistance > bounds.x + bounds.w ? (bounds.x + bounds.w) - x : rayDistance;
     }
 
     if(direction.y == 0.0f) {
-        y = object.boundingBox.y;
-    }else if(direction.y < 0.0f) {
-        y = object.boundingBox.y - rayDistance < bounds.y ? bounds.y : object.boundingBox.y - rayDistance;
-    }else {
-        y = object.boundingBox.y + rayDistance > (bounds.y + bounds.h) - rayHeight ? (bounds.y + bounds.h) - rayHeight : object.boundingBox.y + rayDistance;
+        rayHeight *= 0.10f;
+        float potentialY = object.boundingBox.y - ((rayHeight * 0.5f) + (object.boundingBox.h * 0.5f));
+        y = potentialY < bounds.y ? bounds.y : potentialY;
+    }else if(std::signbit(direction.y)) { //up ray
+        float potentialY = object.boundingBox.y - rayDistance;
+        y = potentialY < bounds.y ? bounds.y : potentialY;
+    }else { //down ray
+        y = object.boundingBox.y + object.boundingBox.h;
+        rayHeight = y + rayDistance > bounds.y + bounds.h ? (bounds.y + bounds.h) - y : rayDistance;
     }
 
     return SDL_FRect{x, y, rayWidth, rayHeight};
@@ -241,41 +251,40 @@ SDL_FRect QuadTree::getRay(const Vec2& direction, const QuadTreeObject& object, 
 */
 std::vector<uint64_t> QuadTree::query(const QuadTreeObject& object) const{
     if(!rangeIntersectsRect(bounds, object.boundingBox)) return {};
-
-    QuadTreeObjectSet collisions = queryInternal(object);
+    QuadTreeObjectSet collisions;
+     queryInternal(object, &collisions);
     std::vector<uint64_t> ids;
     ids.reserve(collisions.size());
     std::transform(collisions.begin(), collisions.end(), std::back_inserter(ids),
-                   [](const QuadTreeObject& object) {
-                        return object.id;
-                    }
+                [](const QuadTreeObject& object) {
+                    return object.id;
+                }
     );
     return ids;
 }
 
-std::unordered_set<QuadTree::QuadTreeObject, QuadTree::QuadTreeObjectHash> QuadTree::queryInternal(const QuadTreeObject& object) const{
-    QuadTreeObjectSet collisions;
-
+void QuadTree::queryInternal(const QuadTreeObject& object, QuadTreeObjectSet* collisionsPtr) const{
     if(divided) {
         for(const auto& childPtr : children) {
             if(rangeIntersectsRect(childPtr->bounds, object.boundingBox)) {
-                QuadTreeObjectSet childCollisions;
-                childCollisions = childPtr->queryInternal(object);
-                collisions.merge(childCollisions);
+                childPtr->queryInternal(object, collisionsPtr);
             }
         }
     }else {
-        for(const auto& [id, boundingBox] : objects)
-            if(id != object.id && rangeIntersectsRect(boundingBox, object.boundingBox))
-                collisions.emplace(id, boundingBox);
+        for(const auto& [id, boundingBox, highPriority] : objects) {
+            if(id != object.id && rangeIntersectsRect(boundingBox, object.boundingBox)) {
+                QuadTreeObject q(id, boundingBox, highPriority);
+                collisionsPtr->insert(q);
+            }
+        }
+
     }
-    return collisions;
 }
 
 
 void QuadTree::subdivide() {
-    float newWidth = bounds.w / 2.0f;
-    float newHeight = bounds.h / 2.0f;
+    float newWidth = bounds.w * 0.5f;
+    float newHeight = bounds.h * 0.5f;
 
     children[0] = std::make_unique<QuadTree>(((SDL_FRect) {bounds.x + newWidth, bounds.y, newWidth, newHeight}), granularity);
     children[1] = std::make_unique<QuadTree>(((SDL_FRect) {bounds.x, bounds.y, newWidth, newHeight}), granularity);

@@ -1,11 +1,13 @@
 #ifndef GENOME_HPP
 #define GENOME_HPP
 #include "Neuron.hpp"
+#include "Traits.hpp"
 #include <cassert>
 #include <cstdint>
 #include <random>
 #include <set>
 #include <unordered_map>
+#include <array>
 
 namespace Genome {
 
@@ -19,6 +21,11 @@ namespace Genome {
         //neuron id -> bias
         //00000000  -> 16bits
         std::unordered_map<uint8_t, uint16_t> biases;
+    };
+
+    struct TraitGenome {
+        //index corresponds to trait id, uint16_t corresponds to trait value.
+        std::array<uint16_t, TRAITS_SIZE> traits;
     };
 
     static inline uint8_t getRandomNeuronID(const bool isSource) {
@@ -52,19 +59,26 @@ namespace Genome {
         return connection;
     }
 
-    static inline uint16_t getRandomWeightOrBias() {
-        std::uniform_int_distribution<uint16_t> distWeightBias(0, UINT16_MAX);
+    static inline uint16_t getRandomValue() {
+        std::uniform_int_distribution<uint16_t> distValue(0, UINT16_MAX);
 
-        return distWeightBias(mt);
+        return distValue(mt);
+    }
+
+    inline TraitGenome createRandomTraitGenome() {
+        TraitGenome traitGenome = {};
+
+        for(auto& trait : traitGenome.traits) {
+            trait = getRandomValue();
+        }
+
+        return traitGenome;
     }
 
     inline Genome createRandomGenome(const uint16_t size) {
         assert(size > 0 && size <= 1000);
 
-        Genome genome {
-            .connections = std::unordered_map<uint16_t, uint16_t>(),
-            .biases = std::unordered_map<uint8_t, uint16_t>()
-        };
+        Genome genome{};
         genome.connections.reserve(size);
 
         for (int i = 0; i < size; i++) {
@@ -72,17 +86,38 @@ namespace Genome {
             if(genome.connections.contains(connectionID)) continue;
             const auto sourceID = static_cast<uint8_t>(connectionID >> 8);
             const auto destID = static_cast<uint8_t>(connectionID);
-            const uint8_t weight = getRandomWeightOrBias();
+            const uint8_t weight = getRandomValue();
 
             genome.connections[connectionID] = weight;
 
             if(!genome.biases.contains(sourceID))
-                genome.biases[sourceID] = getRandomWeightOrBias();
+                genome.biases[sourceID] = getRandomValue();
 
             if(!genome.biases.contains(destID))
-                genome.biases[destID] = getRandomWeightOrBias();
+                genome.biases[destID] = getRandomValue();
         }
         return genome;
+    }
+
+    inline TraitGenome createTraitGenomeFromParents(const TraitGenome& parent1, const TraitGenome& parent2) {
+        assert(parent1.traits.size() == parent2.traits.size());
+        const size_t size = parent1.traits.size();
+        TraitGenome traitGenome{};
+
+        std::uniform_int_distribution<int> distNumParent1Genes(1, static_cast<int>(size) - 2);
+        std::bernoulli_distribution distWhichParentFirst(0.50f);
+
+        const int numParent1Genes = distNumParent1Genes(mt);
+        const bool parent1First = distWhichParentFirst(mt);
+
+        for(int i = 0; i < size; i++) {
+            if((parent1First && i < numParent1Genes) || (!parent1First && i >= size - numParent1Genes)) {
+                traitGenome.traits[i] = parent1.traits[i];
+            }else {
+                traitGenome.traits[i] = parent2.traits[i];
+            }
+        }
+        return traitGenome;
     }
 
     inline Genome createGenomeFromParents(const Genome& parent1, const Genome& parent2) {
@@ -91,9 +126,7 @@ namespace Genome {
         const Genome *largerParentPtr = p1IsLarger ? &parent1 : &parent2;
         const Genome *smallerParentPtr = p1IsLarger ? &parent2 : &parent1;
 
-        Genome genome {
-            .connections = std::unordered_map<uint16_t , uint16_t>(),
-            .biases = std::unordered_map<uint8_t, uint16_t>()};
+        Genome genome{};
         genome.connections.reserve(largerParentPtr->connections.size());
 
         std::uniform_int_distribution<int> distNumSmallerParentGenes(1, static_cast<int>(smallerParentPtr->connections.size()) - 2);
@@ -163,7 +196,7 @@ namespace Genome {
                     genomePtr->connections.erase(connectionID);
                     genomePtr->connections[newConnectionID] = weight;
                     if(!genomePtr->biases.contains(newSourceID))
-                        genomePtr->biases[newSourceID] = getRandomWeightOrBias();
+                        genomePtr->biases[newSourceID] = getRandomValue();
                 }
                 break;
             }
@@ -175,18 +208,18 @@ namespace Genome {
                     genomePtr->connections.erase(connectionID);
                     genomePtr->connections[newConnectionID] = weight;
                     if(!genomePtr->biases.contains(newDestID))
-                        genomePtr->biases[newDestID] = getRandomWeightOrBias();
+                        genomePtr->biases[newDestID] = getRandomValue();
                 }
                 break;
             }
             case 2: { //weight mutation
-                genomePtr->connections[connectionID] = getRandomWeightOrBias();
+                genomePtr->connections[connectionID] = getRandomValue();
                 break;
             }
                 //bias mutation
             case 3: {
-                genomePtr->biases[sourceID] = getRandomWeightOrBias();
-                genomePtr->biases[destID] = getRandomWeightOrBias();
+                genomePtr->biases[sourceID] = getRandomValue();
+                genomePtr->biases[destID] = getRandomValue();
                 break;
             }
             case 4: { //mutate whole gene
@@ -194,19 +227,28 @@ namespace Genome {
 
                 if(!genomePtr->connections.contains(newConnectionID)) {
                     genomePtr->connections.erase(connectionID);
-                    genomePtr->connections[newConnectionID] = getRandomWeightOrBias();
+                    genomePtr->connections[newConnectionID] = getRandomValue();
                     const auto newSourceID = static_cast<uint8_t>(newConnectionID >> 8);
                     const auto newDestID = static_cast<uint8_t>(newConnectionID);
-                    genomePtr->biases[newSourceID] = getRandomWeightOrBias();
-                    genomePtr->biases[newDestID] = getRandomWeightOrBias();
+                    genomePtr->biases[newSourceID] = getRandomValue();
+                    genomePtr->biases[newDestID] = getRandomValue();
                 }else {
-                    genomePtr->connections[connectionID] = getRandomWeightOrBias();
-                    genomePtr->biases[sourceID] = getRandomWeightOrBias();
-                    genomePtr->biases[destID] = getRandomWeightOrBias();
+                    genomePtr->connections[connectionID] = getRandomValue();
+                    genomePtr->biases[sourceID] = getRandomValue();
+                    genomePtr->biases[destID] = getRandomValue();
                 }
                 break;
             }
             default: break;
+        }
+    }
+
+    inline void mutateTraitGenome(TraitGenome* traitGenomePtr) {
+        std::bernoulli_distribution distChanceToMutate(0.10);
+        for(auto& trait : traitGenomePtr->traits) {
+            if(distChanceToMutate(mt)) {
+               trait = getRandomValue();
+            }
         }
     }
 

@@ -25,6 +25,7 @@ public:
 
     [[nodiscard]] uint64_t getID() const {return id;}
     [[nodiscard]] SDL_FRect getBoundingBox() const {return boundingBox;}
+    [[nodiscard]] Vec2 getPosition() const {return {boundingBox.x, boundingBox.y};}
     void setBoundingBox(const SDL_FRect& newBoundingBox) {boundingBox = newBoundingBox;}
     [[nodiscard]] SDL_Color getColor() const {return color;}
     void setColor(const SDL_Color& newColor) {color = newColor;}

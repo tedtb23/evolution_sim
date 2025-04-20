@@ -4,6 +4,7 @@
 #include "SDL3/SDL.h"
 #include "UtilityStructs.hpp"
 #include <vector>
+#include <functional>
 #include <memory>
 #include <cstdint>
 #include <unordered_set>
@@ -14,9 +15,14 @@ public:
     struct QuadTreeObject {
         uint64_t id;
         SDL_FRect boundingBox;
+        bool highPriority;
 
-        explicit QuadTreeObject(const SDL_FRect& boundingBox) : id(UINT64_MAX), boundingBox(boundingBox) {};
-        QuadTreeObject(const uint64_t id, const SDL_FRect& boundingBox) : id(id), boundingBox(boundingBox) {};
+        //QuadTreeObject(const uint64_t id, const bool setHighPriority = false) :
+        //        id(id), boundingBox({0,0,0,0}), highPriority(setHighPriority) {};
+        QuadTreeObject(const SDL_FRect& boundingBox, const bool setHighPriority = false) :
+            id(UINT64_MAX), boundingBox(boundingBox), highPriority(setHighPriority) {};
+        QuadTreeObject(const uint64_t id, const SDL_FRect& boundingBox, const bool setHighPriority = false) :
+            id(id), boundingBox(boundingBox), highPriority(setHighPriority) {};
 
         bool operator==(const QuadTreeObject& other) const {
             return this->id == other.id;
@@ -34,15 +40,44 @@ public:
     */
     QuadTree(const SDL_FRect& bounds, uint8_t granularity) : bounds(bounds), granularity(granularity) {objects.reserve(granularity);};
 
+    QuadTree(const QuadTree& other) : bounds(other.bounds), objects(other.objects), granularity(other.granularity), divided(other.divided) {
+        if(divided) {
+            for(int i = 0; i < 4; i++) {
+                children[i] = std::make_unique<QuadTree>(*other.children[i]);
+            }
+        }
+    }
+
+    QuadTree& operator=(const QuadTree& other) {
+        if (this == &other) return *this;
+
+        bounds = other.bounds;
+        objects = other.objects;
+        granularity = other.granularity;
+        divided = other.divided;
+
+        for(int i = 0; i < 4; i++) {
+            if(other.children[i]) {
+                children[i] = std::make_unique<QuadTree>(*other.children[i]);
+            }else {
+                children[i].reset();
+            }
+        }
+        return *this;
+    }
+
     //[[nodiscard]] SDL_FRect getBounds() const{return bounds;}
 
     void insert(const QuadTreeObject& object);
     void remove(const QuadTreeObject& object);
     void undivide();
 
+    [[nodiscard]] static bool rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range);
+    [[nodiscard]] static bool rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range);
+    [[nodiscard]] static Vec2 getMinDistanceBetweenRects(const SDL_FRect& rect, const SDL_FRect& range);
     [[nodiscard]] std::vector<uint64_t> query(const QuadTreeObject& object) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> getNearestNeighbors(const QuadTreeObject& object) const;
-    [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> raycast(const QuadTreeObject& object) const;
+    [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> raycast(const QuadTreeObject& object, Vec2 velocityCopy) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, uint64_t>> getIntersections() const;
 
     void show(SDL_Renderer& renderer) const;
@@ -87,7 +122,7 @@ private:
     static constexpr float minHeight = 10.0f;
     static constexpr float isNearDistance = 20.0f;
     static constexpr uint8_t maxNeighborsInQuad = 4;
-    static constexpr uint8_t maxNeighbors = 16;
+    static constexpr uint8_t maxNeighbors = 8;
     static constexpr std::array<Vec2, 8> directions = {
         Vec2(1.0f, -1.0f), //northeast
         Vec2(0.0f, -1.0f), //north
@@ -105,13 +140,13 @@ private:
     void subdivide();
     std::vector<QuadTreeObject> undivideInternal();
     void insertIntoSubTree(const QuadTreeObject& object);
-    static bool rangeIntersectsRect(const SDL_FRect& rect, const SDL_FRect& range);
-    static bool rangeIsNearRect(const SDL_FRect& rect, const SDL_FRect& range);
-    static Vec2 getMinDistanceBetweenRects(const SDL_FRect& rect, const SDL_FRect& range);
-    [[nodiscard]] QuadTreeObjectPairSet getIntersectionsInternal() const;
-    [[nodiscard]] QuadTreeObjectSet queryInternal(const QuadTreeObject& object) const;
-    [[nodiscard]] QuadTreeObjectSet getNearestNeighborsInternal(const QuadTreeObject& object) const;
-    [[nodiscard]] std::array<SDL_FRect, 8> getRays(const QuadTreeObject& object, float rayDistance, float rayWidth, float rayHeight) const;
-    [[nodiscard]] SDL_FRect getRay(const Vec2& direction, const QuadTreeObject& object, float rayDistance, float rayWidth, float rayHeight) const;
+    void getIntersectionsInternal(QuadTreeObjectPairSet* collisionsPtr) const;
+    void queryInternal(const QuadTreeObject& object, QuadTreeObjectSet* collisionsPtr) const;
+    void getNearestNeighborsInternal(const QuadTreeObject& object, QuadTreeObjectSet* neighborsPtr) const;
+    [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> raycastInternal(
+            const QuadTreeObject& object,
+            const Vec2& velocityCopy,
+            const float rayDistance) const;
+    [[nodiscard]] SDL_FRect getRay(const Vec2& direction, const QuadTreeObject& object, float rayDistance) const;
 };
 #endif //QUADTREE_HPP
