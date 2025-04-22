@@ -10,6 +10,17 @@
 
 std::mt19937 Organism::mt{std::random_device{}()};
 
+SDL_FColor Organism::colorToFColor(const SDL_Color& color) {
+    constexpr float range = 255.0f;
+
+    return {
+        .r = static_cast<float>(color.r) / range,
+        .g = static_cast<float>(color.g) / range,
+        .b = static_cast<float>(color.b) / range,
+        .a = static_cast<float>(color.a) / range,
+    };
+}
+
 void Organism::mutateGenome() {
     Genome::mutateGenome(&genome);
     neuralNet = NeuralNet(genome);
@@ -26,18 +37,51 @@ void Organism::initTraitValues() {
     }
 }
 
+void Organism::updateHeatParams() {
+    const float tempF = static_cast<float>(temperature) / 255.0f;
+
+    const float coldFactor = (1.0f - traitValues[COLD_TOLERANCE]) * std::max(0.5f - tempF, 0.0f);
+    const float heatFactor = (1.0f - traitValues[HEAT_TOLERANCE]) * std::max(tempF - 0.5f, 0.0f);
+    const float factor = 1.0f - (coldFactor + heatFactor);
+
+    acceleration = factor * maxAcceleration;
+    hungerStep = std::floor(inverseActivation(factor - 0.5f, maxHungerStep, 6.2f));
+}
+
+void Organism::updateAtmosphereParams() {
+    const float oxygenSatF = static_cast<float>(oxygenSat) / 255.0f;
+    const float hydrogenSatF = static_cast<float>(hydrogenSat) / 255.0f;
+
+    const float oxygenFactor = traitValues[OXYGEN_ATMOSPHERE] * oxygenSatF;
+    const float hydrogenFactor = traitValues[HYDROGEN_ATMOSPHERE] * hydrogenSatF;
+
+    const float oxygenInhale = inhaleStep * oxygenFactor;
+    const float hydrogenInhale = inhaleStep * hydrogenFactor;
+
+    if(static_cast<float>(breath) + oxygenInhale < 100.0f) {
+        breath += static_cast<uint8_t>(oxygenInhale);
+    }else breath = 100.0f;
+    if(static_cast<float>(breath) + hydrogenInhale < 100.0f) {
+        breath += static_cast<uint8_t>(hydrogenInhale);
+    }else breath = 100.0f;
+}
+
 void Organism::update(const float deltaTime) {
     if(emitDangerPheromone) emitDangerPheromone = false;
 
-    handleTimer(deltaTime);
+    updateHeatParams();
+    updateAtmosphereParams();
 
-    Vec2 lastPosition = Vec2(boundingBox.x, boundingBox.y);
+    SDL_FRect lastBoundingBox = boundingBox;
+
+    handleTimer(deltaTime);
 
     updateInputs();
     updateFromOutputs(deltaTime);
-    if (Vec2(boundingBox.x, boundingBox.y) != lastPosition) {
+    if (lastBoundingBox.x != boundingBox.x || lastBoundingBox.y != boundingBox.y ||
+        lastBoundingBox.w != boundingBox.w || lastBoundingBox.h != boundingBox.h) {
         simState.quadTreePtr->remove(
-                QuadTree::QuadTreeObject(id, SDL_FRect{lastPosition.x, lastPosition.y, boundingBox.w, boundingBox.h}));
+            QuadTree::QuadTreeObject(id, lastBoundingBox));
         simState.quadTreePtr->insert(QuadTree::QuadTreeObject(id, boundingBox));
     }
 }
@@ -45,8 +89,11 @@ void Organism::update(const float deltaTime) {
 void Organism::grow() {
     if(energy < growthEnergyThreshold) return;
 
-    if(traitValues[GROWTH] * maxSize.x > boundingBox.w) boundingBox.w = traitValues[GROWTH] * maxSize.x;
-    if(traitValues[GROWTH] * maxSize.y > boundingBox.h) boundingBox.h = traitValues[GROWTH] * maxSize.y;
+    float newWidth = traitValues[GROWTH] * maxSize.x;
+    float newHeight = traitValues[GROWTH] * maxSize.y;
+
+    if(newWidth > boundingBox.w) boundingBox.w = newWidth;
+    if(newHeight > boundingBox.h) boundingBox.h = newHeight;
 }
 
 std::array<SDL_Vertex, 3> Organism::getVelocityDirectionTriangleCoords() const {
@@ -83,50 +130,35 @@ std::array<SDL_Vertex, 3> Organism::getVelocityDirectionTriangleCoords() const {
                     .x = centerPoint.x,
                     .y = centerPoint.y
                 },
-                .color = {
-                    .r = 0.0f,
-                    .g = 0.0f,
-                    .b = 0.0f,
-                    .a = 0.50f,
-                }
+                .color = colorToFColor(color)
             },
             SDL_Vertex{ //left
                 .position = {
                     .x = leftPoint.x,
                     .y = leftPoint.y
                 },
-                .color = {
-                    .r = 0.0f,
-                    .g = 0.0f,
-                    .b = 0.0f,
-                    .a = 0.50f,
-                }
+                .color = colorToFColor(color)
             },
             SDL_Vertex{ //right
                 .position = {
                     .x = rightPoint.x,
                     .y = rightPoint.y
                 },
-                .color = {
-                    .r = 0.0f,
-                    .g = 0.0f,
-                    .b = 0.0f,
-                    .a = 0.50f,
-                }
+                .color = colorToFColor(color)
             },
     };
     return result;
 }
 
-void Organism::render(SDL_Renderer* renderer) const {
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+void Organism::render(SDL_Renderer* rendererPtr) const {
+    SDL_SetRenderDrawColor(rendererPtr, color.r, color.g, color.b, color.a);
     const SDL_FRect organismRect = {boundingBox.x, boundingBox.y, boundingBox.w, boundingBox.h};
-    SDL_RenderFillRect(renderer, &organismRect);
+    SDL_RenderFillRect(rendererPtr, &organismRect);
 
     std::array<SDL_Vertex, 3> directionTriangle = getVelocityDirectionTriangleCoords();
     std::array<int, 3> verticesOrder = {1, 0, 2};
     if(!SDL_RenderGeometry(
-            renderer,
+            rendererPtr,
             NULL,
             directionTriangle.data(),
             directionTriangle.size(),
@@ -138,25 +170,29 @@ void Organism::render(SDL_Renderer* renderer) const {
         std::uniform_int_distribution<int> distX(boundingBox.x - 20, boundingBox.x + boundingBox.w + 20);
         std::uniform_int_distribution<int> distY(boundingBox.y - 20, boundingBox.y + boundingBox.h + 20);
 
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_SetRenderDrawColor(rendererPtr, color.r, color.g, color.b, color.a);
         for(int i = 0; i < 20; i++) {
             const SDL_FRect pheromoneRect = {static_cast<float>(distX(mt)), static_cast<float>(distY(mt)), 2, 2};
-            SDL_RenderFillRect(renderer, &pheromoneRect);
+            SDL_RenderFillRect(rendererPtr, &pheromoneRect);
         }
     }
 }
 
 void Organism::handleTimer(const float deltaTime) {
     if(timer >= 1.00f) {
-        hunger -= hungerStep;
-        age++;
+        if(hungerStep <= hunger) {
+            hunger -= hungerStep;
+        }else hunger = 0;
 
+        if(exhaleStep <= breath) {
+            breath -= exhaleStep;
+        }else breath = 0;
+
+        age++;
         if(age >= reproductionAge && energy >= 200) {
-            std::bernoulli_distribution distReproduceChance(traitValues[Traits::FERTILITY]);
-            //if(distReproduceChance(mt))
-                canReproduce = true;
+            canReproduce = true;
         }
-        if(hunger <= 0 || (age >= maxAge)) {
+        if(hunger <= 0 || breath <= 0 || (age >= maxAge)) {
             markedForDeletion = true;
             boundingBox.w = 12.0f;
             boundingBox.h = 12.0f;
@@ -180,8 +216,10 @@ void Organism::updateInputs() {
     std::vector<std::pair<NeuronInputType, float>> activations = neuralNet.getInputActivations();
     for(auto & [neuronID, activation] : activations) {
         switch(neuronID) {
-            case HUNGER:
-                activation = ((-0.01f) * static_cast<float>(hunger)) + 1;
+            case HUNGER: {
+                if(hunger > 0) activation = ((-0.01f) * static_cast<float>(hunger)) + 1;
+            }
+
                 break;
             case BOUNDS_LEFT:
             case BOUNDS_RIGHT:
@@ -341,7 +379,7 @@ float Organism::findNearby(NeuronInputType neuronID, const bool useRaycast) {
         if(!useRaycast) emitDangerPheromone = distance <= 20.0f;
     }
 
-    return inverseActivation(distance, useRaycast ? 0.007f : 0.05f);
+    return inverseActivation(distance, 1.0f, useRaycast ? 0.007f : 0.05f); //values approaching 0 result in values closer to 1.
 }
 
 float Organism::checkBounds(NeuronInputType neuronID) const {
@@ -365,7 +403,7 @@ float Organism::checkBounds(NeuronInputType neuronID) const {
     }
     if(distance < 0.0f) distance = 0.0f;
 
-    return inverseActivation(distance, 0.05f);
+    return inverseActivation(distance, 1.0f, 0.05f); //values approaching 0 result in values closer to 1.
 }
 
 void Organism::tryEat(const float activation) {

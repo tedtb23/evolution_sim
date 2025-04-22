@@ -37,6 +37,13 @@ struct ClayData {
     int windowHeight;
     SDL_Surface* pauseImageDataPtr;
     SDL_Surface* playImageDataPtr;
+    bool paused = false;
+    bool changingFoodSpawnRange = false;
+    bool quadIsShown = false;
+    bool heatMapIsShown = false;
+    bool atmosphereMapIsShown = false;
+    bool randomizingSpawn = true;
+    bool shouldReset = false;
 };
 
 struct AppState {
@@ -68,27 +75,25 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
         const auto clayDataPtr = reinterpret_cast<ClayData*>(userData);
         const auto& simPtr = clayDataPtr->simPtr;
         if(strcmp(elementID.stringId.chars, "Button_Change_Food_Range") == 0) {
-            static bool clicked = false;
-            clicked = !clicked;
-            if(clicked) {
+            clayDataPtr->changingFoodSpawnRange = !clayDataPtr->changingFoodSpawnRange;
+            if(clayDataPtr->changingFoodSpawnRange)
                 simPtr->setUserAction(UserActionType::CHANGE_FOOD_RANGE, UIData{});
-            }else {
+            else
                 simPtr->setUserAction(UserActionType::NONE, UIData{});
-            }
         }else if(strcmp(elementID.stringId.chars, "Button_Show_QuadTree") == 0) {
-            static bool quadIsShown = false;
-            quadIsShown = !quadIsShown;
-            simPtr->showQuadTree(quadIsShown);
+            clayDataPtr->quadIsShown = !clayDataPtr->quadIsShown;
+            simPtr->showQuadTree(clayDataPtr->quadIsShown);
+        }else if(strcmp(elementID.stringId.chars, "Button_Show_HeatMap") == 0) {
+            clayDataPtr->heatMapIsShown = !clayDataPtr->heatMapIsShown;
+            simPtr->showHeatMap(clayDataPtr->heatMapIsShown);
+        }else if(strcmp(elementID.stringId.chars, "Button_Show_AtmosphereMap") == 0) {
+            clayDataPtr->atmosphereMapIsShown = !clayDataPtr->atmosphereMapIsShown;
+            simPtr->showAtmosphereMap(clayDataPtr->atmosphereMapIsShown);
         }else if(strcmp(elementID.stringId.chars, "Button_Reset_Simulation") == 0) {
-            clayDataPtr->simPtr = std::make_shared<Simulation>(
-                    SDL_Rect {200, 0, clayDataPtr->windowWidth - 200, clayDataPtr->windowHeight - 0},
-                    1000,
-                    50,
-                    0.01f);
+            clayDataPtr->shouldReset = true;
         }else if(strcmp(elementID.stringId.chars, "Button_Pause") == 0) {
-            static bool paused = false;
-            paused = !paused;
-            if(paused)
+            clayDataPtr->paused = !clayDataPtr->paused;
+            if(clayDataPtr->paused)
                 simPtr->setUserAction(UserActionType::PAUSE, UIData{});
             else
                 simPtr->setUserAction(UserActionType::UNPAUSE, UIData{});
@@ -96,10 +101,11 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
             clayDataPtr->simPtr->setUserAction(UserActionType::UNFOCUS, {});
             clayDataPtr->simData = {};
         }else if(strcmp(elementID.stringId.chars, "Button_Randomize_Spawn") == 0) {
+            clayDataPtr->randomizingSpawn = !clayDataPtr->randomizingSpawn;
             simPtr->setUserAction(UserActionType::RANDOMIZE_SPAWN, {});
         }else if(strcmp(elementID.stringId.chars, "Background") == 0) {
             clayDataPtr->simData.simObjectData = simPtr->userClicked(pointerData.position.x, pointerData.position.y);
-            OrganismData* organismDataPtr = std::get_if<OrganismData>(&clayDataPtr->simData.simObjectData);
+            auto* organismDataPtr = std::get_if<OrganismData>(&clayDataPtr->simData.simObjectData);
             if(organismDataPtr && simPtr->contains(organismDataPtr->id)) {
                 simPtr->setUserAction(UserActionType::FOCUS, organismDataPtr->id);
                 if(middleClicked) clayDataPtr->simData.showPrimary = false;
@@ -154,12 +160,13 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     .layout = {
                         .sizing = {.width = CLAY_SIZING_FIXED(20), .height = CLAY_SIZING_FIXED(20)},
                     },
+                    .backgroundColor = dataPtr->paused ? COLOR_LIGHT : COLOR_GREY,
                      .image = {
                         .imageData = static_cast<void*>(dataPtr->pauseImageDataPtr),
                         .sourceDimensions = {
-                                .width = 20.0f,
-                                .height = 20.0f
-                            }
+                            .width = 20.0f,
+                            .height = 20.0f
+                        }
                     },
                 }) {
                     Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
@@ -226,7 +233,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     },
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
                 },
-                .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
+                .backgroundColor = Clay_Hovered() || dataPtr->changingFoodSpawnRange ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
                 Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
                 CLAY_TEXT(CLAY_STRING("Change Food"),
@@ -251,7 +258,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                         .y = CLAY_ALIGN_Y_CENTER,
                 }
                 },
-                .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
+                .backgroundColor = Clay_Hovered() || dataPtr->quadIsShown ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
                 Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
                 CLAY_TEXT(CLAY_STRING("Show QuadTree"),
@@ -262,7 +269,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                         .wrapMode = CLAY_TEXT_WRAP_NONE,
                     }));
             }
-            if(dataPtr->simPtr->quadTreeIsShown())
+            if(dataPtr->quadIsShown)
                 CLAY({
                     .layout = {
                         .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
@@ -281,6 +288,46 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                         })
                     );
                 }
+            CLAY({
+                .id = CLAY_ID("Button_Show_HeatMap"),
+                .layout = {
+                    .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    .childAlignment = {
+                        .x = CLAY_ALIGN_X_CENTER,
+                        .y = CLAY_ALIGN_Y_CENTER,
+                   }
+                },
+                .backgroundColor = Clay_Hovered() || dataPtr->heatMapIsShown ?  COLOR_BLUE : COLOR_LIGHT,
+            }) {
+            Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
+            CLAY_TEXT(CLAY_STRING("Show Heat Map"),
+                CLAY_TEXT_CONFIG({
+                    .textColor = COLOR_BLACK,
+                    .fontId = FONT_SMALL,
+                    .fontSize = 0,
+                    .wrapMode = CLAY_TEXT_WRAP_NONE,
+                }));
+            }
+            CLAY({
+                .id = CLAY_ID("Button_Show_AtmosphereMap"),
+                .layout = {
+                    .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
+                    .childAlignment = {
+                        .x = CLAY_ALIGN_X_CENTER,
+                        .y = CLAY_ALIGN_Y_CENTER,
+                    }
+                },
+                .backgroundColor = Clay_Hovered() || dataPtr->atmosphereMapIsShown ?  COLOR_BLUE : COLOR_LIGHT,
+            }) {
+                Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
+                CLAY_TEXT(CLAY_STRING("Show Atmosphere Map"),
+                CLAY_TEXT_CONFIG({
+                    .textColor = COLOR_BLACK,
+                    .fontId = FONT_SMALL,
+                    .fontSize = 0,
+                    .wrapMode = CLAY_TEXT_WRAP_NONE,
+                }));
+            }
             CLAY({
                 .id = CLAY_ID("Button_Reset_Simulation"),
                 .layout = {
@@ -310,7 +357,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                         .y = CLAY_ALIGN_Y_CENTER,
                     }
                 },
-                     .backgroundColor = Clay_Hovered() ?  COLOR_BLUE : COLOR_LIGHT,
+                     .backgroundColor = Clay_Hovered() || dataPtr->randomizingSpawn ?  COLOR_BLUE : COLOR_LIGHT,
             }) {
                 Clay_OnHover(handleButtonPress, reinterpret_cast<intptr_t>(dataPtr));
                 CLAY_TEXT(CLAY_STRING("Randomize Spawn"),
@@ -527,6 +574,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
     Clay_SetMeasureTextFunction(SDL_MeasureText, statePtr->rendererData.fonts);
 
     statePtr->simPtr = std::make_shared<Simulation>(
+            statePtr->rendererPtr,
             SDL_Rect {200, 0, width - 200, height - 0},
             1000,
             50,
@@ -607,6 +655,31 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     int width, height;
     SDL_GetWindowSize(statePtr->windowPtr, &width, &height);
 
+    if(statePtr->clayData.shouldReset) {
+        statePtr->simPtr = std::make_shared<Simulation>(
+            statePtr->rendererPtr,
+            SDL_Rect {200, 0, width - 200, height - 0},
+            1000,
+            50,
+            0.01f);
+        SDL_Surface* pauseImageSurface = statePtr->clayData.pauseImageDataPtr;
+        SDL_Surface* playImageSurface = statePtr->clayData.playImageDataPtr;
+        statePtr->clayData = ClayData{
+                statePtr->simPtr,
+                SimData {
+                    true,
+                    {},
+                    std::string("QuadTree Size: 0"),
+                    std::string("Population: 0"),
+                },
+                std::string("FPS: 0"),
+                width,
+                height,
+                pauseImageSurface,
+                playImageSurface};
+        return SDL_APP_CONTINUE;
+    }
+
     statePtr->simPtr->update(SDL_Rect {200, 0, width - 200, height - 0}, deltaTime);
 
     if(timeAccumForTextUpdate >= 1.0f) {
@@ -635,10 +708,8 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     SDL_SetRenderDrawColor(statePtr->rendererPtr, 255, 255, 255, 255);
     SDL_RenderClear(statePtr->rendererPtr);
 
-    statePtr->simPtr->render(statePtr->rendererPtr);
+    statePtr->simPtr->render();
     SDL_Clay_RenderClayCommands(&statePtr->rendererData, &renderCommands);
-    if(statePtr->clayData.simPtr.get() != statePtr->simPtr.get())
-        statePtr->simPtr = statePtr->clayData.simPtr;
 
     SDL_RenderPresent(statePtr->rendererPtr);
 

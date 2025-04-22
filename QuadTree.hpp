@@ -80,7 +80,7 @@ public:
     [[nodiscard]] std::vector<std::pair<uint64_t, Vec2>> raycast(const QuadTreeObject& object, Vec2 velocityCopy) const;
     [[nodiscard]] std::vector<std::pair<uint64_t, uint64_t>> getIntersections() const;
 
-    void show(SDL_Renderer& renderer) const;
+    void show(SDL_Renderer* rendererPtr) const;
     [[nodiscard]] size_t size() const;
 
 private:

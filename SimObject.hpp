@@ -36,7 +36,7 @@ public:
 
     virtual void update(const float deltaTime) {}
     virtual void fixedUpdate() {}
-    virtual void render(SDL_Renderer* renderer) const;
+    virtual void render(SDL_Renderer* rendererPtr) const;
 
 protected:
     SimState simState;

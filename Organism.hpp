@@ -45,11 +45,9 @@ public:
     static constexpr float velocityMax = 6.0f;
     static constexpr float velocityDecay = 0.9f;
 
-    bool isEmittingDangerPheromone() const {return emitDangerPheromone;}
+    [[nodiscard]] bool isEmittingDangerPheromone() const {return emitDangerPheromone;}
     void addRaycastNeighbors(const std::vector<std::pair<uint64_t, Vec2>>& newRaycastNeighbors) {raycastNeighbors = newRaycastNeighbors;}
     void addNeighbors(const std::vector<std::pair<uint64_t, Vec2>>& newNeighbors) {neighbors = newNeighbors;}
-    //void clearRaycastNeighbors() {raycastNeighbors.clear();}
-    //void clearNeighbors() {neighbors.clear();}
     void addCollisionID(const uint64_t collisionID) {collisionIDs.emplace_back(collisionID);}
     void clearCollisionIDs() {collisionIDs.clear();}
     [[nodiscard]] Vec2 getVelocity() const {return velocity;}
@@ -60,25 +58,37 @@ public:
         }
         velocity = newVelocity;
     }
-
-    uint8_t getAge() const {return age;}
-    uint8_t getHunger() const {return hunger;}
-    uint32_t getEnergy() const {return energy;}
-    bool shouldReproduce() const {return canReproduce;}
+    [[nodiscard]] uint8_t getTemperature() const {return temperature;}
+    void setTemperature(const uint8_t newTemperature) {temperature = newTemperature;}
+    [[nodiscard]] uint8_t getBreath() {return breath;}
+    [[nodiscard]] float getOxygenSat() const {return oxygenSat;}
+    void setOxygenSat(const float newOxygenSat) {oxygenSat = newOxygenSat;}
+    [[nodiscard]] float getHydrogenSat() const {return hydrogenSat;}
+    void setHydrogenSat(const float newHydrogenSat) {hydrogenSat = newHydrogenSat;}
+    [[nodiscard]] uint8_t getAge() const {return age;}
+    [[nodiscard]] uint8_t getHunger() const {return hunger;}
+    [[nodiscard]] uint32_t getEnergy() const {return energy;}
+    [[nodiscard]] bool shouldReproduce() const {return canReproduce;}
     void reproduce() {canReproduce = false; reproduced = true; energy = energy < 100 ? 0 : energy - 100;}
     void update(float deltaTime) override;
     void fixedUpdate() override;
-    void render(SDL_Renderer* renderer) const override;
+    void render(SDL_Renderer* rendererPtr) const override;
 
 private:
     Genome::TraitGenome traitGenome;
     std::array<float, TRAITS_SIZE> traitValues{};
     Genome::Genome genome;
     NeuralNet neuralNet;
+    float acceleration = 0.0f;
     Vec2 velocity = {0.0f, 0.0f};
     uint8_t hunger = 100;
+    uint8_t hungerStep = 0;
     uint32_t energy = 0;
     uint8_t age = 0;
+    uint8_t temperature = 128;
+    uint8_t breath = 100;
+    float oxygenSat = 0.0f;
+    float hydrogenSat = 0.0f;
     bool canReproduce = false;
     bool reproduced = false;
     bool detectedDangerPheromone = false;
@@ -87,12 +97,14 @@ private:
     float growthTimer = 0.0f;
 
     static std::mt19937 mt;
-    static constexpr Vec2 maxSize{16.0f, 16.0f};
-    static constexpr float acceleration = 3.0f;
+    static constexpr Vec2 maxSize{32.0f, 32.0f};
     static constexpr uint8_t reproductionAge = 5;
+    static constexpr float maxAcceleration = 5.0f;
     static constexpr uint8_t maxAge = 20;
-    static constexpr uint8_t hungerStep = 10;
+    static constexpr uint8_t maxHungerStep = 50;
     static constexpr uint16_t growthEnergyThreshold = 300;
+    static constexpr uint8_t inhaleStep = 30;
+    static constexpr uint8_t exhaleStep = 10;
 
     std::vector<std::pair<uint64_t, Vec2>> neighbors;
     std::vector<std::pair<uint64_t, Vec2>> raycastNeighbors;
@@ -100,10 +112,13 @@ private:
 
     void initTraitValues();
     void grow();
+    void updateHeatParams();
+    void updateAtmosphereParams();
 
     void handleTimer(float deltaTime);
     void updateInputs();
     void updateFromOutputs(float deltaTime);
+
 
     void move(const Vec2& moveVelocity);
     template<typename SimObjectType> bool isColliding() const;
@@ -111,7 +126,8 @@ private:
     float checkBounds(NeuronInputType neuronID) const;
     void tryEat(float activation);
     std::array<SDL_Vertex, 3> getVelocityDirectionTriangleCoords() const;
-    static float inverseActivation(float value, float strictness) {return 2.0f / (1.0f + std::exp(value * strictness));} //values approaching 0 result in values closer to 1.
+    static float inverseActivation(float value, float rootPos, float strictness) {return (rootPos * 2.0f) / (1.0f + std::exp(value * strictness));}
+    static SDL_FColor colorToFColor(const SDL_Color& color);
 };
 
 

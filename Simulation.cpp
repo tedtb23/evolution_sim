@@ -12,7 +12,8 @@
 
 std::mt19937 Simulation::mt{std::random_device{}()};
 
-Simulation::Simulation(const SDL_Rect& simBounds, const uint16_t maxPopulation, const int genomeSize, const float initialMutationFactor = 0.25f) :
+Simulation::Simulation(SDL_Renderer* rendererPtr, const SDL_Rect& simBounds, const uint16_t maxPopulation, const int genomeSize, const float initialMutationFactor = 0.25f) :
+    rendererPtr(rendererPtr),
     simBoundsPtr(std::make_shared<SDL_Rect>(simBounds)),
     maxPopulation(maxPopulation),
     maxFood(maxPopulation),
@@ -34,11 +35,107 @@ Simulation::Simulation(const SDL_Rect& simBounds, const uint16_t maxPopulation, 
         color.b += 15;
     }
     addFood();
+    generateHeatMap();
+    generateAtmosphereMap();
     startWorkerThread();
 }
 
 Simulation::~Simulation() {
+    if(heatMapTexture) SDL_DestroyTexture(heatMapTexture);
+    if(atmosphereMapTexture) SDL_DestroyTexture(atmosphereMapTexture);
     stopWorkerThread();
+}
+
+SDL_Color Simulation::heatValToColor(uint8_t heatVal) {
+    SDL_Color color{255, 255, 255, 100};
+
+    if(heatVal >= 120 && heatVal <= 128) {
+        return color;
+    }else if(heatVal > 128) {
+        color.g -= heatVal;
+        color.b -= heatVal;
+    }else {
+        color.r = heatVal;
+        color.g = heatVal;
+    }
+
+    return color;
+}
+
+SDL_Color Simulation::atmosphereValToColor(uint8_t atmosphereVal) {
+    SDL_Color color{255, 255, 255, 100};
+    float atmosphereValF = static_cast<float>(atmosphereVal) / 255.0f;
+
+    if(atmosphereVal >= 120 && atmosphereVal <= 128) {
+        return color;
+    }else if(atmosphereVal > 128) {
+        color.r = 0;
+        color.g = static_cast<uint8_t>(100 * atmosphereValF);
+        color.b = static_cast<uint8_t>(255 * atmosphereValF);
+    }else {
+        atmosphereValF += 0.5f;
+        color.r = static_cast<uint8_t>(50 * atmosphereValF);
+        color.g = static_cast<uint8_t>(255 * atmosphereValF);
+        color.b = 0;
+    }
+    return color;
+}
+
+void Simulation::generateAtmosphereMap() {
+    if(atmosphereMapTexture) SDL_DestroyTexture(atmosphereMapTexture);
+    if(!atmosphereMap.empty()) atmosphereMap.clear();
+    atmosphereMapTexture = SDL_CreateTexture(rendererPtr, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, simBoundsPtr->w, simBoundsPtr->h);
+    std::uniform_int_distribution<uint8_t> distAtmosphere(0, UINT8_MAX);
+
+    SDL_SetRenderTarget(rendererPtr, atmosphereMapTexture);
+    SDL_SetRenderDrawColor(rendererPtr, 255, 255, 255, 100);
+    SDL_RenderClear(rendererPtr);
+    for(int x = simBoundsPtr->x; x < simBoundsPtr->x + simBoundsPtr->w; x += atmosphereMapGridSize) { //if simbounds !start at 0 we could miss factors organisms may hash to
+        for(int y = simBoundsPtr->y; y < simBoundsPtr->y + simBoundsPtr->h; y += atmosphereMapGridSize) {
+            Vec2 position(static_cast<float>(x), static_cast<float>(y), atmosphereMapGridSize);
+            SDL_FRect rect{position.x - static_cast<float>(simBoundsPtr->x), position.y - static_cast<float>(simBoundsPtr->y), atmosphereMapGridSize, atmosphereMapGridSize};
+            uint8_t atmosphereVal = distAtmosphere(mt);
+            SDL_Color color = atmosphereValToColor(atmosphereVal);
+            atmosphereMap.insert(std::make_pair(position, atmosphereVal));
+            SDL_SetRenderDrawColor(rendererPtr, color.r, color.g, color.b, color.a);
+            SDL_RenderFillRect(rendererPtr, &rect);
+        }
+    }
+    SDL_SetRenderTarget(rendererPtr, NULL);
+}
+
+void Simulation::generateHeatMap() {
+    if(heatMapTexture) SDL_DestroyTexture(heatMapTexture);
+    if(!heatMap.empty()) heatMap.clear();
+    heatMapTexture = SDL_CreateTexture(rendererPtr, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, simBoundsPtr->w, simBoundsPtr->h);
+    std::uniform_int_distribution<uint8_t> distHeat(0, UINT8_MAX);
+
+    SDL_SetRenderTarget(rendererPtr, heatMapTexture);
+    SDL_SetRenderDrawColor(rendererPtr, 255, 255, 255, 100);
+    SDL_RenderClear(rendererPtr);
+    for(int x = 0; x < simBoundsPtr->x + simBoundsPtr->w; x += heatMapGridSize) {
+        for(int y = 0; y < simBoundsPtr->y + simBoundsPtr->h; y += heatMapGridSize) {
+            Vec2 position(static_cast<float>(x), static_cast<float>(y), heatMapGridSize);
+            SDL_FRect rect{position.x - static_cast<float>(simBoundsPtr->x), position.y - static_cast<float>(simBoundsPtr->y), heatMapGridSize, heatMapGridSize};
+            uint8_t heatVal = distHeat(mt);
+            SDL_Color color = heatValToColor(heatVal);
+            heatMap.insert(std::make_pair(position, heatVal));
+            SDL_SetRenderDrawColor(rendererPtr, color.r, color.g, color.b, color.a);
+            SDL_RenderFillRect(rendererPtr, &rect);
+        }
+    }
+    SDL_SetRenderTarget(rendererPtr, NULL);
+}
+
+SDL_FColor Simulation::colorToFColor(const SDL_Color& color) {
+    float range = 255.0f;
+
+    return {
+        .r = static_cast<float>(color.r) / range,
+        .g = static_cast<float>(color.g) / range,
+        .b = static_cast<float>(color.b) / range,
+        .a = static_cast<float>(color.a) / range,
+    };
 }
 
 Vec2 Simulation::getRandomPoint() const {
@@ -56,19 +153,19 @@ bool Simulation::shouldMutate() const {
     return distBool(mt);
 }
 
-void Simulation::render(SDL_Renderer *renderer) {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
-    SDL_FRect a = {200, 100, 100, 100};
-    SDL_RenderFillRect(renderer, &a);
+void Simulation::render() {
+    SDL_FRect simBoundsFRect = rectToFRect(*simBoundsPtr);
+    if(heatMapVisible) SDL_RenderTexture(rendererPtr, heatMapTexture, NULL, &simBoundsFRect);
+    if(atmosphereMapVisible) SDL_RenderTexture(rendererPtr, atmosphereMapTexture, NULL, &simBoundsFRect);
     if(currUserAction == UserActionType::CHANGE_FOOD_RANGE) {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 100);
+        SDL_SetRenderDrawColor(rendererPtr, 255, 255, 0, 100);
         SDL_FRect foodSpawnRangeFloat = rectToFRect(foodSpawnRange);
-        SDL_RenderFillRect(renderer, &foodSpawnRangeFloat);
+        SDL_RenderFillRect(rendererPtr, &foodSpawnRangeFloat);
     }
     for(const auto & [id, objectPtr]: simObjects) {
-        objectPtr->render(renderer);
+        objectPtr->render(rendererPtr);
     }
-    if(quadTreeVisible) quadTreePtr->show(*renderer);
+    if(quadTreeVisible) quadTreePtr->show(rendererPtr);
 }
 
 void Simulation::update(const SDL_Rect& newSimBounds, const float deltaTime) {
@@ -86,25 +183,14 @@ void Simulation::update(const SDL_Rect& newSimBounds, const float deltaTime) {
 
         if(organisms.contains(id)) {
             organismPtr = organisms[id];
-            if(foodMap.contains(organismPtr->getPosition())) {
-                auto range = foodMap.equal_range(organismPtr->getPosition());
-                for(auto foodItr = range.first; foodItr != range.second; ++foodItr){
-                    organismPtr->addCollisionID(foodItr->second->getID());
-                }
-                slowInFood(organismPtr);
-            }
+            setMapVals(organismPtr);
         }
 
         objectPtr->update(deltaTime);
 
         if(organisms.contains(id)) {
             organismPtr->clearCollisionIDs();
-            if (
-                organismPtr->shouldReproduce() &&
-                std::find(nextGenParents.begin(), nextGenParents.end(), objectPtr) == nextGenParents.end()
-            ) {
-                nextGenParents.push_back(organismPtr);
-            }
+            tryAddParent(organismPtr);
         }
         checkBounds(objectPtr);
 
@@ -141,6 +227,41 @@ void Simulation::update(const SDL_Rect& newSimBounds, const float deltaTime) {
     for(const auto& [id1, id2] : quadTreePtr->getIntersections()) {
         handleCollision(id1, id2);
     }
+}
+
+void Simulation::tryAddParent(const std::shared_ptr<Organism> &organismPtr) {
+    if (
+        organismPtr->shouldReproduce() &&
+        std::find(nextGenParents.begin(), nextGenParents.end(), organismPtr) == nextGenParents.end()
+    ) {
+        nextGenParents.push_back(organismPtr);
+    }
+}
+
+void Simulation::setMapVals(const std::shared_ptr<Organism>& organismPtr) {
+    const Vec2 organismPositionFoodMap = organismPtr->getPosition();
+    const Vec2 organismPositionHeatMap(organismPositionFoodMap.x, organismPositionFoodMap.y, heatMapGridSize);
+    const Vec2 organismPositionAtmosphereMap(organismPositionFoodMap.x, organismPositionFoodMap.y, atmosphereMapGridSize);
+    if(foodMap.contains(organismPositionFoodMap)) {
+        auto range = foodMap.equal_range(organismPositionFoodMap);
+        for(auto foodItr = range.first; foodItr != range.second; ++foodItr){
+            organismPtr->addCollisionID(foodItr->second->getID());
+        }
+        slowInFood(organismPtr);
+    }
+    if(heatMap.contains(organismPositionHeatMap))
+        organismPtr->setTemperature(heatMap[organismPositionHeatMap]);
+    else SDL_Log("No heat map value for organism position");
+    if(atmosphereMap.contains(organismPositionAtmosphereMap)) {
+        const uint8_t atmosphereVal = atmosphereMap[organismPositionAtmosphereMap];
+        if(atmosphereVal > 128) {
+            organismPtr->setOxygenSat(static_cast<float>(atmosphereVal - 128) / 127.0f);
+            organismPtr->setHydrogenSat(0.0f);
+        }else {
+            organismPtr->setHydrogenSat(static_cast<float>(atmosphereVal) / 128.0f);
+            organismPtr->setOxygenSat(0.0f);
+        }
+    }else SDL_Log("No atmosphere map value for organism position");
 }
 
 void Simulation::startWorkerThread() {
@@ -191,7 +312,6 @@ void Simulation::stopWorkerThread() {
 
 void Simulation::neighborTask() {
     if(!workerThreadQuadTreeCopy) return;
-    if(paused) return;
 
     for(auto & [id, objectPtr]: simObjects) {
         objectPtr->fixedUpdate();
@@ -212,6 +332,7 @@ void Simulation::neighborTask() {
 }
 
 void Simulation::fixedUpdate() {
+    if(paused) return;
     static int calls = 6;
     SDL_LockMutex(workerMutex);
     quadTreePtr->undivide();
@@ -297,13 +418,12 @@ void Simulation::addFood() {
         foodSpawnAmountLocal = foodSpawnAmount - foodAmount;
     }
     if(
-            foodSpawnRange.x < simBoundsPtr->x ||
-                               (foodSpawnRange.x + foodSpawnRange.w) > (simBoundsPtr->x + simBoundsPtr->w) ||
-            foodSpawnRange.y < simBoundsPtr->y ||
-                               (foodSpawnRange.y + foodSpawnRange.h) > (simBoundsPtr->y + simBoundsPtr->h)
-            ) return;
+        foodSpawnRange.x < simBoundsPtr->x ||
+        (foodSpawnRange.x + foodSpawnRange.w) > (simBoundsPtr->x + simBoundsPtr->w) ||
+        foodSpawnRange.y < simBoundsPtr->y ||
+        (foodSpawnRange.y + foodSpawnRange.h) > (simBoundsPtr->y + simBoundsPtr->h)
+    ) return;
     foodAmount += foodSpawnAmountLocal;
-
 
     std::uniform_int_distribution<int> distX(foodSpawnRange.x, (foodSpawnRange.x + foodSpawnRange.w) - (int)foodWidth);
     std::uniform_int_distribution<int> distY(foodSpawnRange.y, (foodSpawnRange.y + foodSpawnRange.h) - (int)foodHeight);
@@ -421,6 +541,7 @@ void Simulation::updateSimBounds(const SDL_Rect& newSimBounds) {
 
         *simBoundsPtr = newSimBounds;
         *quadTreePtr = QuadTree(rectToFRect(*simBoundsPtr), 10);
+        generateHeatMap();
     }
 }
 
@@ -559,9 +680,13 @@ OrganismData Simulation::getOrganismData(const std::shared_ptr<Organism>& organi
     std::vector<std::pair<NeuronOutputType, float>> outputActivations = organismPtr->getOutputActivations();
 
     organismInfoStream << "ID: " << organismPtr->getID() << std::endl <<
-        "Hunger: " << static_cast<int>(organismPtr->getHunger()) << std::endl <<
+        "Hunger: " << static_cast<int>(organismPtr->getHunger()) << "%" << std::endl <<
         "Age: " << static_cast<int>(organismPtr->getAge()) << std::endl <<
-        "Energy: " << static_cast<int>(organismPtr->getEnergy());
+        "Energy: " << static_cast<int>(organismPtr->getEnergy()) << std::endl <<
+        "Temperature: " << static_cast<int>(organismPtr->getTemperature()) << "°F" << std::endl <<
+        "Breath: " << static_cast<int>(organismPtr->getBreath()) << "%" << std::endl <<
+        "Oxygen Sat: " << static_cast<int>(organismPtr->getOxygenSat() * 100) << "%" << std::endl <<
+        "Hydrogen Sat: " << static_cast<int>(organismPtr->getHydrogenSat() * 100) << "%" << std::endl;
 
     neuralNetInputStream << "Neural Net Inputs: " << std::endl;
     for(const auto& [neuronID, activation] : inputActivations) {

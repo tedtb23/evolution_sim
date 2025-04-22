@@ -121,7 +121,6 @@ namespace Genome {
     }
 
     inline Genome createGenomeFromParents(const Genome& parent1, const Genome& parent2) {
-        assert(parent1.connections.size() >= 2 && parent2.connections.size() >= 2);
         const bool p1IsLarger = parent1.connections.size() >= parent2.connections.size();
         const Genome *largerParentPtr = p1IsLarger ? &parent1 : &parent2;
         const Genome *smallerParentPtr = p1IsLarger ? &parent2 : &parent1;
@@ -134,6 +133,21 @@ namespace Genome {
 
         const int numSmallerParentGenes = distNumSmallerParentGenes(mt);
         const bool smallerParentFirst = distWhichParentFirst(mt);
+
+        if(parent1.connections.size() <= 2 || parent2.connections.size() <= 2) {
+            if(smallerParentFirst) {
+                genome.connections.insert(parent1.connections.begin(), parent1.connections.end());
+                genome.connections.insert(parent2.connections.begin(), parent2.connections.end());
+                genome.biases.insert(parent2.biases.begin(), parent2.biases.end());
+                genome.biases.insert(parent1.biases.begin(), parent1.biases.end());
+            }else{
+                genome.connections.insert(parent2.connections.begin(), parent2.connections.end());
+                genome.connections.insert(parent1.connections.begin(), parent1.connections.end());
+                genome.biases.insert(parent1.biases.begin(), parent1.biases.end());
+                genome.biases.insert(parent2.biases.begin(), parent2.biases.end());
+            }
+            return genome;
+        }
 
         int i = 0;
         auto itrL = largerParentPtr->connections.begin();
@@ -262,7 +276,7 @@ namespace Genome {
 
         do {
             numConnectionsToMutate = distNumConnectionsToMutate(mt);
-        } while(numConnectionsToMutate < 1 || numConnectionsToMutate > genomePtr->connections.size() - 1);
+        } while(numConnectionsToMutate < 1 || numConnectionsToMutate > genomePtr->connections.size());
 
         for(int i = 0; i < numConnectionsToMutate; i++) {
             connectionsToMutate.insert(distConnectionsToMutate(mt));

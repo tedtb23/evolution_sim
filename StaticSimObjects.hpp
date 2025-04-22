@@ -22,7 +22,7 @@ public:
     void update(const float deltaTime) override {
         //handleTimers(deltaTime);
     }
-    //void render(SDL_Renderer* renderer) const override;
+    //void render(SDL_Renderer* rendererPtr) const override;
 private:
     int nutritionalValue = 100;
     //uint8_t age = 0;
@@ -60,7 +60,7 @@ public:
         if(foodAmount == 0) markedForDeletion = true;
     }
 
-    void render(SDL_Renderer* renderer) const override {}
+    void render(SDL_Renderer* rendererPtr) const override {}
 
 private:
     uint16_t foodAmount;
@@ -97,14 +97,14 @@ public:
 
     }
 
-    void render(SDL_Renderer* renderer) const override {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
+    void render(SDL_Renderer* rendererPtr) const override {
+        SDL_SetRenderDrawColor(rendererPtr, 0, 0, 255, 255);
         SDL_Vertex vert[vertices.size()];
         for(int i = 0; i < vertices.size(); i++) {
             vert[i] = vertices[i];
         }
 
-        if(!SDL_RenderGeometry(renderer, NULL, vertices.data(), vertices.size(), NULL, 0)) SDL_Log("%s", SDL_GetError());
+        if(!SDL_RenderGeometry(rendererPtr, NULL, vertices.data(), vertices.size(), NULL, 0)) SDL_Log("%s", SDL_GetError());
     }
 
 private:

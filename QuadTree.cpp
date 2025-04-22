@@ -355,14 +355,14 @@ Vec2 QuadTree::getMinDistanceBetweenRects(const SDL_FRect& rect, const SDL_FRect
     return {distX, distY};
 }
 
-void QuadTree::show(SDL_Renderer& renderer) const{
-    SDL_SetRenderDrawColor(&renderer, 255, 0, 0, 255);
-    SDL_RenderRect(&renderer, &bounds);
+void QuadTree::show(SDL_Renderer* rendererPtr) const{
+    SDL_SetRenderDrawColor(rendererPtr, 255, 0, 0, 255);
+    SDL_RenderRect(rendererPtr, &bounds);
     if(divided) {
         for(const auto& childPtr : children) {
-            childPtr->show(renderer);
+            childPtr->show(rendererPtr);
         }
     }else {
-        SDL_RenderDebugText(&renderer, bounds.x, bounds.y, std::to_string(objects.size()).c_str());
+        SDL_RenderDebugText(rendererPtr, bounds.x, bounds.y, std::to_string(objects.size()).c_str());
     }
 }

@@ -14,12 +14,12 @@
 
 class Simulation{
 public:
-    Simulation(const SDL_Rect& simBounds, uint16_t maxPopulation, int genomeSize, float initialMutationFactor);
+    Simulation(SDL_Renderer* rendererPtr, const SDL_Rect& simBounds, uint16_t maxPopulation, int genomeSize, float initialMutationFactor);
     ~Simulation();
     void update(const SDL_Rect& simBounds, float deltaTime);
     void fixedUpdate();
-    void render(SDL_Renderer* renderer);
-    void setGenomeSize(int genomeSize);
+    void render();
+    void setRenderer(SDL_Renderer* newRendererPtr) {rendererPtr = newRendererPtr;}
 
     SimObjectData userClicked(float mouseX, float mouseY);
     SimObjectData getFocusedSimObjectData();
@@ -29,11 +29,17 @@ public:
     uint64_t getCurrentGeneration() const {return generationNum;}
     uint16_t getCurrentPopulation() const {return population;}
     void showQuadTree(bool setQuadTreeVisible) {quadTreeVisible = setQuadTreeVisible;}
-    [[nodiscard]] bool quadTreeIsShown() const {return quadTreeVisible;}
+    //[[nodiscard]] bool quadTreeIsShown() const {return quadTreeVisible;}
     [[nodiscard]] size_t getQuadSize() const {return quadTreePtr->size();}
+    void showHeatMap(bool setHeatMapVisible) {heatMapVisible = setHeatMapVisible;}
+    void showAtmosphereMap(bool setAtmosphereMapVisible) {atmosphereMapVisible = setAtmosphereMapVisible;}
+    //[[nodiscard]] bool heatMapIsShown() const {return heatMapVisible;}
     bool contains(const uint64_t id) {return simObjects.contains(id);}
 
+    static SDL_FColor colorToFColor(const SDL_Color& color);
+
 private:
+    SDL_Renderer* rendererPtr;
     uint64_t generationNum = 0;
     uint16_t population = 0;
     const uint16_t maxPopulation;
@@ -55,8 +61,11 @@ private:
     std::unordered_map<uint64_t, std::shared_ptr<Organism>> organisms;
     std::unordered_multimap<Vec2, std::shared_ptr<Food>, Vec2PositionalHash, Vec2PositionalEqual> foodMap;
     std::unordered_map<uint64_t, std::shared_ptr<FoodSpawnRange>> foodSpawnRanges;
+    std::unordered_map<Vec2, uint8_t, Vec2PositionalHash, Vec2PositionalEqual> heatMap;
+    std::unordered_map<Vec2, uint8_t, Vec2PositionalHash, Vec2PositionalEqual> atmosphereMap;
+    SDL_Texture* heatMapTexture = nullptr;
+    SDL_Texture* atmosphereMapTexture = nullptr;
     std::vector<std::shared_ptr<Organism>> nextGenParents;
-    static std::mt19937 mt;
     void markForDeletion(const uint64_t id) {simObjects[id]->markForDeletion();}
     std::shared_ptr<SimObject> get(const uint64_t id) {
         if(!simObjects.contains(id)) return nullptr;
@@ -74,7 +83,9 @@ private:
     bool foodSpawnRandom = false;
     bool randomizeSpawn = true;
     bool quadTreeVisible = false;
-
+    bool heatMapVisible = false;
+    bool atmosphereMapVisible = false;
+    static std::mt19937 mt;
     static constexpr float clickWidth = 8.0f;
     static constexpr float clickHeight = 8.0f;
     static constexpr float organismWidth = 8.0f;
@@ -82,25 +93,8 @@ private:
     static constexpr float foodWidth = 6.0f;
     static constexpr float foodHeight = 6.0f;
     static constexpr float generationLength = 10.0f;
-
-    static SDL_Rect fRecttoRect(const SDL_FRect& fRect) {
-        return {
-            static_cast<int>(fRect.x),
-            static_cast<int>(fRect.y),
-            static_cast<int>(fRect.w),
-            static_cast<int>(fRect.h),
-        };
-    };
-    static SDL_FRect rectToFRect(const SDL_Rect& rect) {
-        return {
-            static_cast<float>(rect.x),
-            static_cast<float>(rect.y),
-            static_cast<float>(rect.w),
-            static_cast<float>(rect.h),
-        };
-    };
-    static void slowInFood(const std::shared_ptr<Organism>& organismPtr);
-
+    static constexpr float heatMapGridSize = 200.0f;
+    static constexpr float atmosphereMapGridSize = 500.0f;
     std::unique_ptr<QuadTree> workerThreadQuadTreeCopy = nullptr;
     std::shared_ptr<ThreadData> threadData = nullptr;
     SDL_Thread* workerThread = nullptr;
@@ -108,14 +102,37 @@ private:
     SDL_Condition* workerCondition = nullptr;
     bool workerRunning = true;
     bool workAvailable = false;
+
+    static SDL_Color heatValToColor(uint8_t heatVal);
+    SDL_Color atmosphereValToColor(uint8_t atmosphereVal);
+    static SDL_Rect fRecttoRect(const SDL_FRect& fRect) {
+        return {
+                static_cast<int>(fRect.x),
+                static_cast<int>(fRect.y),
+                static_cast<int>(fRect.w),
+                static_cast<int>(fRect.h),
+        };
+    };
+    static SDL_FRect rectToFRect(const SDL_Rect& rect) {
+        return {
+                static_cast<float>(rect.x),
+                static_cast<float>(rect.y),
+                static_cast<float>(rect.w),
+                static_cast<float>(rect.h),
+        };
+    };
+    static void slowInFood(const std::shared_ptr<Organism>& organismPtr);
+    static uint64_t getRandomID();
+    static OrganismData getOrganismData(const std::shared_ptr<Organism>& organismPtr);
+
+    void setMapVals(const std::shared_ptr<Organism>& organismPtr);
+    void generateHeatMap();
+    void generateAtmosphereMap();
     void neighborTask();
     void startWorkerThread();
     void stopWorkerThread();
-
     void handleTimers(float deltaTIme);
-
     void createNextGeneration();
-
     void randomizeFoodParams();
     void addFire();
     void addFood();
@@ -132,6 +149,7 @@ private:
             const SDL_Color& initialColor,
             const SDL_FRect& boundingBox);
     void addFoodSpawnRange();
+    void tryAddParent(const std::shared_ptr<Organism>& organismPtr);
     void reproduceOrganisms(const std::shared_ptr<Organism>& organism1Ptr, const std::shared_ptr<Organism>& organism2Ptr);
     void mutateOrganisms();
     void handleCollision(uint64_t id1, uint64_t id2);
@@ -141,7 +159,7 @@ private:
     bool shouldMutate() const;
     void setMutationFactor(float newMutationFactor) {
         if(newMutationFactor >= 0.0f && newMutationFactor <= 1.0f)
-            this->mutationFactor = newMutationFactor;
+            mutationFactor = newMutationFactor;
     }
 
     void handleChangeFoodRange(const UIData& uiData);
@@ -151,7 +169,10 @@ private:
     std::array<std::function<void (const UIData&)>, static_cast<size_t>(UserActionType::SIZE)> userActionFuncMapping = {
         [] (const UIData& uiData) {}, //none
         [this] (const UIData& uiData) {handleChangeFoodRange(uiData);}, //change_food_range
-        [this] (const UIData& uiData) {paused = true;}, //pause
+        [this] (const UIData& uiData) {
+            paused = true;
+            setUserAction(UserActionType::NONE, uiData);
+        }, //pause
         [this] (const UIData& uiData) { //unpause
             paused = false;
             setUserAction(UserActionType::NONE, uiData);
@@ -162,7 +183,7 @@ private:
         [this] (const UIData& uiData) { //unfocus
             handleUnfocus(uiData);
         },
-        [this] (const UIData& uiData) { //randomize_spawn
+        [this] (const UIData& uiData) { //randomize_spawn   todo: maybe split into a randomize_spawn and parent_spawn?
             randomizeSpawn = !randomizeSpawn;
             setUserAction(UserActionType::NONE, uiData);
         }
@@ -170,8 +191,6 @@ private:
 
     std::function<void()> currUserActionFunc = [this] () {userActionFuncMapping[0](UIData());};
     Vec2 getRandomPoint() const;
-    static uint64_t getRandomID();
-    static OrganismData getOrganismData(const std::shared_ptr<Organism>& organismPtr);
 };
 
 #endif //SIMULATION_HPP
