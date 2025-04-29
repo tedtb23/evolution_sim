@@ -86,7 +86,7 @@ namespace Genome {
             if(genome.connections.contains(connectionID)) continue;
             const auto sourceID = static_cast<uint8_t>(connectionID >> 8);
             const auto destID = static_cast<uint8_t>(connectionID);
-            const uint8_t weight = getRandomValue();
+            const uint16_t weight = getRandomValue();
 
             genome.connections[connectionID] = weight;
 

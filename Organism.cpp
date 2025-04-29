@@ -8,19 +8,6 @@
 #include "SimObject.hpp"
 #include <array>
 
-std::mt19937 Organism::mt{std::random_device{}()};
-
-SDL_FColor Organism::colorToFColor(const SDL_Color& color) {
-    constexpr float range = 255.0f;
-
-    return {
-        .r = static_cast<float>(color.r) / range,
-        .g = static_cast<float>(color.g) / range,
-        .b = static_cast<float>(color.b) / range,
-        .a = static_cast<float>(color.a) / range,
-    };
-}
-
 void Organism::mutateGenome() {
     Genome::mutateGenome(&genome);
     neuralNet = NeuralNet(genome);
@@ -34,6 +21,7 @@ void Organism::mutateGenome() {
 void Organism::initTraitValues() {
     for(int i = 0; i < traitValues.size(); i++) {
         traitValues[i] = static_cast<float>(traitGenome.traits[i]) / static_cast<float>(UINT16_MAX);
+        if(i == Traits::SPEED) traitValues[i] *= 10.0f;
     }
 }
 
@@ -66,6 +54,16 @@ void Organism::updateAtmosphereParams() {
     }else breath = 100.0f;
 }
 
+void Organism::grow() {
+    if(energy < growthEnergyThreshold) return;
+
+    float newWidth = traitValues[GROWTH] * maxSize.x;
+    float newHeight = traitValues[GROWTH] * maxSize.y;
+
+    if(newWidth > boundingBox.w) boundingBox.w = newWidth;
+    if(newHeight > boundingBox.h) boundingBox.h = newHeight;
+}
+
 void Organism::update(const float deltaTime) {
     if(emitDangerPheromone) emitDangerPheromone = false;
 
@@ -84,16 +82,6 @@ void Organism::update(const float deltaTime) {
             QuadTree::QuadTreeObject(id, lastBoundingBox));
         simState.quadTreePtr->insert(QuadTree::QuadTreeObject(id, boundingBox));
     }
-}
-
-void Organism::grow() {
-    if(energy < growthEnergyThreshold) return;
-
-    float newWidth = traitValues[GROWTH] * maxSize.x;
-    float newHeight = traitValues[GROWTH] * maxSize.y;
-
-    if(newWidth > boundingBox.w) boundingBox.w = newWidth;
-    if(newHeight > boundingBox.h) boundingBox.h = newHeight;
 }
 
 std::array<SDL_Vertex, 3> Organism::getVelocityDirectionTriangleCoords() const {
@@ -130,21 +118,21 @@ std::array<SDL_Vertex, 3> Organism::getVelocityDirectionTriangleCoords() const {
                     .x = centerPoint.x,
                     .y = centerPoint.y
                 },
-                .color = colorToFColor(color)
+                .color = SimUtils::colorToFColor(color)
             },
             SDL_Vertex{ //left
                 .position = {
                     .x = leftPoint.x,
                     .y = leftPoint.y
                 },
-                .color = colorToFColor(color)
+                .color = SimUtils::colorToFColor(color)
             },
             SDL_Vertex{ //right
                 .position = {
                     .x = rightPoint.x,
                     .y = rightPoint.y
                 },
-                .color = colorToFColor(color)
+                .color = SimUtils::colorToFColor(color)
             },
     };
     return result;
@@ -152,8 +140,7 @@ std::array<SDL_Vertex, 3> Organism::getVelocityDirectionTriangleCoords() const {
 
 void Organism::render(SDL_Renderer* rendererPtr) const {
     SDL_SetRenderDrawColor(rendererPtr, color.r, color.g, color.b, color.a);
-    const SDL_FRect organismRect = {boundingBox.x, boundingBox.y, boundingBox.w, boundingBox.h};
-    SDL_RenderFillRect(rendererPtr, &organismRect);
+    SDL_RenderFillRect(rendererPtr, &boundingBox);
 
     std::array<SDL_Vertex, 3> directionTriangle = getVelocityDirectionTriangleCoords();
     std::array<int, 3> verticesOrder = {1, 0, 2};
@@ -165,38 +152,26 @@ void Organism::render(SDL_Renderer* rendererPtr) const {
             verticesOrder.data(),
             verticesOrder.size()))
         SDL_Log("%s", SDL_GetError());
-
-    if(emitDangerPheromone) {
-        std::uniform_int_distribution<int> distX(boundingBox.x - 20, boundingBox.x + boundingBox.w + 20);
-        std::uniform_int_distribution<int> distY(boundingBox.y - 20, boundingBox.y + boundingBox.h + 20);
-
-        SDL_SetRenderDrawColor(rendererPtr, color.r, color.g, color.b, color.a);
-        for(int i = 0; i < 20; i++) {
-            const SDL_FRect pheromoneRect = {static_cast<float>(distX(mt)), static_cast<float>(distY(mt)), 2, 2};
-            SDL_RenderFillRect(rendererPtr, &pheromoneRect);
-        }
-    }
 }
 
 void Organism::handleTimer(const float deltaTime) {
     if(timer >= 1.00f) {
-        if(hungerStep <= hunger) {
-            hunger -= hungerStep;
-        }else hunger = 0;
+        if(deleteSoon) markedForDeletion = true;
 
-        if(exhaleStep <= breath) {
-            breath -= exhaleStep;
-        }else breath = 0;
+        if(hungerStep <= hunger) hunger -= hungerStep;
+        else hunger = 0;
+
+        if(exhaleStep <= breath) breath -= exhaleStep;
+        else breath = 0;
 
         age++;
-        if(age >= reproductionAge && energy >= 200) {
-            canReproduce = true;
-        }
+        if(age >= reproductionAge && energy >= 200) canReproduce = true;
+
         if(hunger <= 0 || breath <= 0 || (age >= maxAge)) {
-            markedForDeletion = true;
-            boundingBox.w = 12.0f;
-            boundingBox.h = 12.0f;
-            color = {255, 0, 0, 255};
+            deleteSoon = true;
+            //boundingBox.w = 12.0f;
+            //boundingBox.h = 12.0f; //todo some kind of death animation
+            //color = {255, 0, 0, 255};
         }
 
         timer = 0.0f;
@@ -218,9 +193,8 @@ void Organism::updateInputs() {
         switch(neuronID) {
             case HUNGER: {
                 if(hunger > 0) activation = ((-0.01f) * static_cast<float>(hunger)) + 1;
-            }
-
                 break;
+            }
             case BOUNDS_LEFT:
             case BOUNDS_RIGHT:
             case BOUNDS_UP:
@@ -251,15 +225,20 @@ void Organism::updateInputs() {
             case FIRE_DOWN:
                 activation = std::max(findNearby<Fire>(neuronID), findNearby<Fire>(neuronID, true));
                 break;
-            case DETECT_DANGER_PHEROMONE: { //this may not work a lot of the time, no guarantee organism detection neurons will be before pheromone detection neurons in vector.
-                if(detectedDangerPheromone) {
-                    activation = 1.0f;
-                    detectedDangerPheromone = false;
-                }else {
-                    activation = 0.0f;
-                }
+            case DETECT_DANGER_PHEROMONE: {
+                activation = detectedDangerPheromone ? 1.0f : 0.0f;
+                detectedDangerPheromone = false;
                 break;
             }
+            case TEMPERATURE:
+                activation = static_cast<float>(temperature) / 255.0f;
+                break;
+            case OXYGEN_SATURATION:
+                activation = oxygenSat;
+                break;
+            case HYDROGEN_SATURATION:
+                activation = hydrogenSat;
+                break;
             default:
                 activation = 0.00f;
                 break;
@@ -270,30 +249,29 @@ void Organism::updateInputs() {
 
 void Organism::updateFromOutputs(const float deltaTime) {
     for(auto & [neuronID, activation] : neuralNet.getOutputActivations()) {
-        //if(activation < 0.50f) continue;
         switch(neuronID) {
             case MOVE_LEFT: {
                 Vec2 moveVelocity = velocity;
                 moveVelocity.x += -activation * acceleration * traitValues[Traits::SPEED] * deltaTime;
-                move(moveVelocity);
+                move(moveVelocity, deltaTime);
                 break;
             }
             case MOVE_RIGHT: {
                 Vec2 moveVelocity = velocity;
                 moveVelocity.x += activation * acceleration * traitValues[Traits::SPEED] * deltaTime;
-                move(moveVelocity);
+                move(moveVelocity, deltaTime);
                 break;
             }
             case MOVE_UP: {
                 Vec2 moveVelocity = velocity;
                 moveVelocity.y += -activation * acceleration * traitValues[Traits::SPEED] * deltaTime;
-                move(moveVelocity);
+                move(moveVelocity, deltaTime);
                 break;
             }
             case MOVE_DOWN: {
                 Vec2 moveVelocity = velocity;
                 moveVelocity.y += activation * acceleration * traitValues[Traits::SPEED] * deltaTime;
-                move(moveVelocity);
+                move(moveVelocity, deltaTime);
                 break;
             }
             case EAT: {
@@ -305,11 +283,11 @@ void Organism::updateFromOutputs(const float deltaTime) {
     }
 }
 
-void Organism::move(const Vec2& moveVelocity) {
+void Organism::move(const Vec2& moveVelocity, const float deltaTime) {
     if(abs(moveVelocity.x) <= velocityMax && abs(moveVelocity.y) <= velocityMax) {
         velocity = moveVelocity;
-        boundingBox.x += moveVelocity.x;
-        boundingBox.y += moveVelocity.y;
+        boundingBox.x += moveVelocity.x * deltaTime;
+        boundingBox.y += moveVelocity.y * deltaTime;
     }
 }
 
@@ -330,7 +308,6 @@ float Organism::findNearby(NeuronInputType neuronID, const bool useRaycast) {
     if(useRaycast && raycastNeighbors.empty()) return 0.0f;
     if(!useRaycast && neighbors.empty()) return 0.0f;
     const std::vector<std::pair<uint64_t, Vec2>>* searchObjectsPtr;
-
     if(useRaycast) searchObjectsPtr = &raycastNeighbors;
     else searchObjectsPtr = &neighbors;
 
@@ -340,10 +317,6 @@ float Organism::findNearby(NeuronInputType neuronID, const bool useRaycast) {
         std::shared_ptr<SimObject> basePtr = (*simState.getFuncPtr)(neighborID);
         std::shared_ptr<SimObjectType> derivedPtr = std::dynamic_pointer_cast<SimObjectType>(basePtr);
         if(!derivedPtr) continue;
-        if constexpr(std::is_same_v<SimObjectType, Organism>) {
-            if(derivedPtr->isEmittingDangerPheromone())
-                detectedDangerPheromone = true;
-        }
         switch(neuronID) {
             case ORGANISM_LEFT:
             case FOOD_LEFT:

@@ -4,8 +4,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 project(evolution_sim)
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
-#set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fsanitize=address")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++")
+
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
@@ -32,5 +32,6 @@ target_sources(evolution_sim PRIVATE
         Organism.cpp
         Simulation.cpp
         QuadTree.cpp
-        SimObject.cpp)
+        SimObject.cpp
+        SimUtils.cpp)
 target_link_libraries(evolution_sim PRIVATE SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3::SDL3)

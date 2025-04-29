@@ -157,12 +157,12 @@ std::shared_ptr<Neuron> NeuralNet::createNeuron(
 
 void NeuralNet::feedForward() const {
     for(auto & [neuronID, neuronPtr] : hiddenNeurons) {
-        if(neuronPtr->prevLayerConnections.has_value()) { //maybe not needed as the optional for prevLayerConnections for hidden layer neurons will always be initialized during creation of the neuron
+        if(neuronPtr->prevLayerConnections.has_value()) {
             for(NeuronConnection& prevConnection : *neuronPtr->prevLayerConnections) {
                 const float originalActivation = neuronPtr->activation;
                 if(neuronPtr != prevConnection.neuronPtr) {
                     neuronPtr->activation += prevConnection.neuronPtr->activation * prevConnection.weight;
-                }else {
+                }else { //if the neuron is connected to itself don't use the intermediate activation
                     neuronPtr->activation += originalActivation * prevConnection.weight;
                 }
             }
@@ -171,12 +171,10 @@ void NeuralNet::feedForward() const {
         }
     }
     for(auto & [neuronID, neuronPtr] : outputNeurons) {
-        //if (neuronPtr->prevLayerConnections.has_value()) {
-            for (NeuronConnection &prevConnection: *neuronPtr->prevLayerConnections) {
-                neuronPtr->activation += prevConnection.neuronPtr->activation * prevConnection.weight;
-            }
-            neuronPtr->activation += neuronPtr->bias;
-            neuronPtr->activation = sigmoid(neuronPtr->activation);
-        //}
+        for (NeuronConnection &prevConnection: *neuronPtr->prevLayerConnections) {
+            neuronPtr->activation += prevConnection.neuronPtr->activation * prevConnection.weight;
+        }
+        neuronPtr->activation += neuronPtr->bias;
+        neuronPtr->activation = sigmoid(neuronPtr->activation);
     }
 }

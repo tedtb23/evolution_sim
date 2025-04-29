@@ -1,8 +1,8 @@
 #define SDL_MAIN_USE_CALLBACKS
-#include <SDL3/SDL_main.h>
-#include <SDL3/SDL.h>
-#include <SDL3_ttf/SDL_ttf.h>
-#include <SDL3_image/SDL_image.h>
+#include "SDL3/SDL_main.h"
+#include "SDL3/SDL.h"
+#include "SDL3_ttf/SDL_ttf.h"
+#include "SDL3_image/SDL_image.h"
 
 #define CLAY_IMPLEMENTATION
 #include "clay.h"
@@ -93,6 +93,7 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
             clayDataPtr->shouldReset = true;
         }else if(strcmp(elementID.stringId.chars, "Button_Pause") == 0) {
             clayDataPtr->paused = !clayDataPtr->paused;
+            clayDataPtr->changingFoodSpawnRange = false;
             if(clayDataPtr->paused)
                 simPtr->setUserAction(UserActionType::PAUSE, UIData{});
             else
@@ -162,7 +163,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                     },
                     .backgroundColor = dataPtr->paused ? COLOR_LIGHT : COLOR_GREY,
                      .image = {
-                        .imageData = static_cast<void*>(dataPtr->pauseImageDataPtr),
+                        .imageData = dataPtr->paused ? static_cast<void*>(dataPtr->playImageDataPtr) : static_cast<void*>(dataPtr->pauseImageDataPtr),
                         .sourceDimensions = {
                             .width = 20.0f,
                             .height = 20.0f
@@ -375,7 +376,7 @@ static Clay_RenderCommandArray Clay_CreateLayout(ClayData* dataPtr) {
                 .layout = {
                     .sizing = {
                         .width = CLAY_SIZING_FIT(250, 450),
-                        .height = CLAY_SIZING_FIT(200, 600),
+                        .height = CLAY_SIZING_FIT(250, 700),
                     },
                     .padding = {.left = 5, .right = 5, .top = 5, .bottom = 5},
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
@@ -578,7 +579,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char* argv[]) {
             SDL_Rect {200, 0, width - 200, height - 0},
             1000,
             50,
-            0.01f);
+            0.08f);
     statePtr->clayData = ClayData{
             statePtr->simPtr,
             {
@@ -661,7 +662,7 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
             SDL_Rect {200, 0, width - 200, height - 0},
             1000,
             50,
-            0.01f);
+            0.08f);
         SDL_Surface* pauseImageSurface = statePtr->clayData.pauseImageDataPtr;
         SDL_Surface* playImageSurface = statePtr->clayData.playImageDataPtr;
         statePtr->clayData = ClayData{
