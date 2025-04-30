@@ -100,15 +100,18 @@ static void handleButtonPress(Clay_ElementId elementID, Clay_PointerData pointer
                 simPtr->setUserAction(UserActionType::UNPAUSE, UIData{});
         }else if(strcmp(elementID.stringId.chars, "Button_Close_Organism_ToolTip") == 0) {
             clayDataPtr->simPtr->setUserAction(UserActionType::UNFOCUS, {});
+            clayDataPtr->changingFoodSpawnRange = false;
             clayDataPtr->simData = {};
         }else if(strcmp(elementID.stringId.chars, "Button_Randomize_Spawn") == 0) {
             clayDataPtr->randomizingSpawn = !clayDataPtr->randomizingSpawn;
             simPtr->setUserAction(UserActionType::RANDOMIZE_SPAWN, {});
+            clayDataPtr->changingFoodSpawnRange = false;
         }else if(strcmp(elementID.stringId.chars, "Background") == 0) {
             clayDataPtr->simData.simObjectData = simPtr->userClicked(pointerData.position.x, pointerData.position.y);
             auto* organismDataPtr = std::get_if<OrganismData>(&clayDataPtr->simData.simObjectData);
             if(organismDataPtr && simPtr->contains(organismDataPtr->id)) {
                 simPtr->setUserAction(UserActionType::FOCUS, organismDataPtr->id);
+                clayDataPtr->changingFoodSpawnRange = false;
                 if(middleClicked) clayDataPtr->simData.showPrimary = false;
                 else clayDataPtr->simData.showPrimary = true;
             }

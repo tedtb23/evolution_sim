@@ -327,10 +327,10 @@ void Simulation::neighborTask() {
 
 void Simulation::fixedUpdate() {
     if(paused) return;
-    static int calls = 6;
+    static int calls = 2;
     SDL_LockMutex(workerMutex);
     quadTreePtr->undivide();
-    if(calls >= 6) {
+    if(calls >= 2) {
         workerThreadQuadTreeCopy = std::make_unique<QuadTree>(*quadTreePtr);
         calls = 0;
     }else calls++;
