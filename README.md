@@ -1,6 +1,9 @@
 # Evolution Simulation
 Simulates the process of evolution through natural selection with organisms that have their behavior driven by neural network brains. Inspired by David Miller's biosim4 project https://github.com/davidrmiller/biosim4.
 
+<img width="1279" height="720" alt="image" src="https://github.com/user-attachments/assets/92fda660-461b-460f-8188-5921ae2400f6" />
+
+
 ## Installation
  ### Prerequisites
  - cmake >= 3.31.3
@@ -8,7 +11,13 @@ Simulates the process of evolution through natural selection with organisms that
  - Windows >= 11 24H2
  - a c++ compiler
    
-1. ``
+1. Open a terminal to the directory you want evolution_sim installed to
+2. Clone the repository `git clone github.com/tedtb23/evolution_sim`
+3. Navigate to the evolution_sim directory in the terminal `cd PATH_TO_GIT_CLONE_DIR/evolution_sim`
+4. Make a build directory `mkdir build`
+5. Navigate to the newly created build directory `cd build`
+6. Use cmake to configure the project for building `cmake ..`
+7. Use cmake to build the project `cmake --build .`
 
 ## Simulation overview
 The simulation consists of a 2D plane filled with organisms.  
@@ -18,6 +27,7 @@ The user can change the food spawn region or press ENTER to make the food spawn 
 The plane also consists of a temperature and atmosphere map which give different regions of the plane different temperatures and atmospheres.
 The user can click to view the temperature and atmosphere maps.  
 The user can click to randomize the spawn of organisms across the plane, or deselect it to have organisms spawn close to one of their parents.  
+The user can click on any organism in the simulation to see statistics about that organism. Including the current state of their neural net brain, their hunger, etc.  
 Organisms have a neural network genome and a trait genome (discussed further in the Genome overview section) that determines an organism's neural network structure and trait composition.
 These genomes can be inherited and mutate over time.  
 Organisms can emit pheromones around dangers like fire to alert other organisms to its presence.  
