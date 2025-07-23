@@ -4,8 +4,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 project(evolution_sim)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++")
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
@@ -24,6 +22,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
     message("Building on macOS")
     add_executable(evolution_sim MACOSX_BUNDLE)
     file(COPY resources/arial.ttf DESTINATION "${CMAKE_BINARY_DIR}/evolution_sim.app/Contents/resources")
+    file(COPY resources/images DESTINATION "${CMAKE_BINARY_DIR}/evolution_sim.app/Contents/resources")
 endif()
 target_sources(evolution_sim PRIVATE
         main.cpp

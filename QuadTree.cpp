@@ -252,7 +252,7 @@ SDL_FRect QuadTree::getRay(const Vec2& direction, const QuadTreeObject& object, 
 std::vector<uint64_t> QuadTree::query(const QuadTreeObject& object) const{
     if(!rangeIntersectsRect(bounds, object.boundingBox)) return {};
     QuadTreeObjectSet collisions;
-     queryInternal(object, &collisions);
+    queryInternal(object, &collisions);
     std::vector<uint64_t> ids;
     ids.reserve(collisions.size());
     std::transform(collisions.begin(), collisions.end(), std::back_inserter(ids),
@@ -273,11 +273,9 @@ void QuadTree::queryInternal(const QuadTreeObject& object, QuadTreeObjectSet* co
     }else {
         for(const auto& [id, boundingBox, highPriority] : objects) {
             if(id != object.id && rangeIntersectsRect(boundingBox, object.boundingBox)) {
-                QuadTreeObject q(id, boundingBox, highPriority);
-                collisionsPtr->insert(q);
+                collisionsPtr->emplace(id, boundingBox, highPriority);
             }
         }
-
     }
 }
 
