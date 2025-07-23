@@ -6,6 +6,7 @@ Simulates the process of evolution through natural selection with organisms that
 
 ## Installation
  ### Prerequisites
+ - git >= 2.39.5
  - cmake >= 3.31.3
  - MacOS >= Sequoia 15.5 (24F74) OR
  - Windows >= 11 24H2
