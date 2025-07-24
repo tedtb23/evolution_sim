@@ -28,7 +28,8 @@ The user can change the food spawn region or press ENTER to make the food spawn 
 The plane also consists of a temperature and atmosphere map which give different regions of the plane different temperatures and atmospheres.
 The user can click to view the temperature and atmosphere maps.  
 The user can click to randomize the spawn of organisms across the plane, or deselect it to have organisms spawn close to one of their parents.  
-The user can click on any organism in the simulation to see statistics about that organism. Including the current state of their neural net brain, their hunger, etc.  
+The user can left-click on any organism in the simulation to see statistics about that organism. Including the current state of their neural net brain, their hunger, etc.  
+The user can middle-click on any organism to see that organism's traits.  
 Organisms have a neural network genome and a trait genome (discussed further in the Genome overview section) that determines an organism's neural network structure and trait composition.
 These genomes can be inherited and mutate over time.  
 Organisms can emit pheromones around dangers like fire to alert other organisms to its presence.  
