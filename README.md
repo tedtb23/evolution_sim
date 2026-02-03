@@ -13,7 +13,7 @@ Simulates the process of evolution through natural selection with organisms that
  - a c++ compiler
    
 1. Open a terminal to the directory you want evolution_sim installed to
-2. Clone the repository `git clone github.com/tedtb23/evolution_sim`
+2. Clone the repository `git clone --recurse-submodules github.com/tedtb23/evolution_sim`
 3. Navigate to the evolution_sim directory in the terminal `cd PATH_TO_GIT_CLONE_DIR/evolution_sim`
 4. Make a build directory `mkdir build`
 5. Navigate to the newly created build directory `cd build`
