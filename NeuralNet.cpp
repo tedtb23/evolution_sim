@@ -156,7 +156,7 @@ std::shared_ptr<Neuron> NeuralNet::createNeuron(
 }
 
 void NeuralNet::feedForward() const {
-    for(auto & [neuronID, neuronPtr] : hiddenNeurons) {
+    for(auto& [neuronID, neuronPtr] : hiddenNeurons) {
         if(neuronPtr->prevLayerConnections.has_value()) {
             for(NeuronConnection& prevConnection : *neuronPtr->prevLayerConnections) {
                 const float originalActivation = neuronPtr->activation;
@@ -170,11 +170,13 @@ void NeuralNet::feedForward() const {
             neuronPtr->activation = sigmoid(neuronPtr->activation);
         }
     }
-    for(auto & [neuronID, neuronPtr] : outputNeurons) {
-        for (NeuronConnection &prevConnection: *neuronPtr->prevLayerConnections) {
-            neuronPtr->activation += prevConnection.neuronPtr->activation * prevConnection.weight;
+    for(auto& [neuronID, neuronPtr] : outputNeurons) {
+        if(neuronPtr->prevLayerConnections.has_value()) {
+            for(NeuronConnection& prevConnection : *neuronPtr->prevLayerConnections) {
+                neuronPtr->activation += prevConnection.neuronPtr->activation * prevConnection.weight;
+            }
+            neuronPtr->activation += neuronPtr->bias;
+            neuronPtr->activation = sigmoid(neuronPtr->activation);
         }
-        neuronPtr->activation += neuronPtr->bias;
-        neuronPtr->activation = sigmoid(neuronPtr->activation);
     }
 }

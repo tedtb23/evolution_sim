@@ -1,11 +1,13 @@
 #ifndef NEURON_HPP
 #define NEURON_HPP
+
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
 
-constexpr std::array hiddenValues = {"ZERO","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE"};
-constexpr std::array inputValues = {
+constexpr std::array<const char*, 10> hiddenValues = {"ZERO","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE"};
+constexpr std::array<const char*, 23> inputValues = {
     "HUNGER",
     "FOOD_LEFT",
     "FOOD_RIGHT",
@@ -30,7 +32,7 @@ constexpr std::array inputValues = {
     "OXYGEN_SATURATION",
     "HYDROGEN_SATURATION",
 };
-constexpr std::array outputValues = {"MOVE_LEFT", "MOVE_RIGHT", "MOVE_UP", "MOVE_DOWN", "EAT",};
+constexpr std::array<const char*, 5> outputValues = {"MOVE_LEFT", "MOVE_RIGHT", "MOVE_UP", "MOVE_DOWN", "EAT",};
 
 #define NEURONHIDDENTYPE_VALUES hiddenValues;
 #define NEURONINPUTTYPE_VALUES inputValues;
