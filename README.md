@@ -8,8 +8,9 @@ Simulates the process of evolution through natural selection with organisms that
  ### Prerequisites
  - git >= 2.39.5
  - cmake >= 3.31.3
- - MacOS >= Sequoia 15.5 (24F74) OR
- - Windows >= 11 24H2
+ - MacOS (Tested on Sequoia 15.5) OR
+ - Windows 11 (Tested on 24H2) OR
+ - Linux (Tested on Ubuntu 25.10) 
  - a c++ compiler
    
 1. Open a terminal to the directory you want evolution_sim installed to
